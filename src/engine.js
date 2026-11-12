@@ -35,9 +35,9 @@ export class SortEngine {
       if (this.doneGenerating) { this.finish(); return null; }
       let next;
       try { next = this.generator.next(); }
-      catch (error) { this.failed = true; this.error = error.message; this.completed = true; return null; }
+      catch (error) { this.failed = true; this.error = error.message; this.completed = true; this.finishedAt = performance.now(); this.highlight = null; return null; }
       if (next.done) { this.doneGenerating = true; this.finish(); return null; }
-      entry = { op: next.value, old: next.value.t === 'w' ? this.values[next.value.i] : null };
+      entry = { op: next.value, old: (next.value.t === 'w' || next.value.t === 'd') ? this.values[next.value.i] : null };
       this.history.push(entry);
       if (this.history.length > HISTORY_LIMIT) { this.history.shift(); this.historyStart++; this.position--; }
     }
@@ -45,6 +45,7 @@ export class SortEngine {
     const { op } = entry;
     if (op.t === 's') { [this.values[op.i], this.values[op.j]] = [this.values[op.j], this.values[op.i]]; this.swaps++; }
     if (op.t === 'w') { this.values[op.i] = op.v; this.writes++; }
+    if (op.t === 'd') { this.values.splice(op.i,1); }
     if (op.t === 'c') this.comparisons++;
     this.operations++;
     this.highlight = op;
@@ -57,6 +58,7 @@ export class SortEngine {
     const { op, old } = this.history[this.position];
     if (op.t === 's') { [this.values[op.i], this.values[op.j]] = [this.values[op.j], this.values[op.i]]; this.swaps--; }
     if (op.t === 'w') { this.values[op.i] = old; this.writes--; }
+    if (op.t === 'd') { this.values.splice(op.i,0,old); }
     if (op.t === 'c') this.comparisons--;
     this.operations--;
     this.completed = false;

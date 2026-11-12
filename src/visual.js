@@ -1,4 +1,4 @@
-const colors = { normal: '#9eacbf', compare: '#efb43e', swap: '#4189f4', pivot: '#a58bee', sorted: '#34bd8f' };
+const colors = { normal: '#9eacbf', compare: '#efb43e', swap: '#4189f4', pivot: '#a58bee', sorted: '#34bd8f', altered: '#dea25f' };
 
 export class BarView {
   constructor(canvas, { compact = false, style = 'bars' } = {}) {
@@ -22,7 +22,7 @@ export class BarView {
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.width = width; this.height = height;
   }
-  draw(values, { highlight = null, completed = false, finishedAt = 0, now = performance.now() } = {}) {
+  draw(values, { highlight = null, completed = false, finishedAt = 0, now = performance.now(), altered = false } = {}) {
     if (!this.ctx) return;
     this.resize();
     const ctx = this.ctx, w = this.width, h = this.height;
@@ -39,7 +39,7 @@ export class BarView {
     for (let i = 0; i < n; i++) {
       const x = padX + i * bw, val = values[i], barH = Math.max(2, (val / max) * scaleHeight);
       let color = colors.normal;
-      if (completed) color = i / n <= completeFraction ? colors.sorted : colors.normal;
+      if (completed) color = i / n <= completeFraction ? (altered ? colors.altered : colors.sorted) : colors.normal;
       else if (highlight?.t === 'p' && activeA === i) color = colors.pivot;
       else if (i === activeA || i === activeB) color = highlight?.t === 's' || highlight?.t === 'w' ? colors.swap : colors.compare;
       if (!this.compact && i === this.hover && !completed) color = '#2967ca';

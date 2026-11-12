@@ -4,6 +4,7 @@ import { SortEngine, speedToEventsPerSecond } from './engine.js';
 import { BarView } from './visual.js';
 import { SortAudio } from './audio.js';
 import { icon } from './icons.js';
+import { algorithmDescriptions } from './descriptions.js';
 import { LIBRARY_DEFAULT_SPEED, LIBRARY_SPEEDS, LIBRARY_COMPLETE_HOLD_MS, libraryInputSize, libraryEventsPerSecond, filterLibraryAlgorithms, advanceLibraryCard } from './library.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -19,7 +20,7 @@ sound.volume = state.volume / 100;
 sound.style = state.soundStyle;
 let engine = null, engineView = null, compareEngines = [], compareViews = [], miniEngines = [], libraryCards = [], libraryObserver = null, libraryDetail = null, libraryDetailFocus = null;
 let lastFrame = 0, opAccumulator = 0, toastTimeout = null, focusTimeout = null;
-const categories = ['전체', '기초', '고급', '분포', '하이브리드', '특수'];
+const categories = ['전체', '기초', '고급', '분포', '하이브리드', '특수', '패러디'];
 const sortedDemoIds = ['bubble', 'insertion', 'quickHoare', 'merge', 'heap', 'shell', 'cocktail', 'radixLsd', 'selection', 'timsort', 'pancake', 'comb'];
 
 function persist() { const { algo, pattern, count, speed, style, soundOn, volume, soundStyle, librarySpeed } = state; try { localStorage.setItem('sortlab:prefs', JSON.stringify({ algo, pattern, count, speed, style, soundOn, volume, soundStyle, librarySpeed })); } catch { /* privacy mode */ } }
@@ -82,7 +83,7 @@ function renderPage() {
 
 function escapeHtml(str) { return String(str).replace(/[&<>"']/g,v=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[v])); }
 function showAlgoLimit(eng) { if (eng.initial.length !== state.count) toast(`${eng.algorithm.en}: 배열을 ${eng.initial.length}개로 제한했습니다.`); }
-function showCompareLimits(source) { const limited = compareEngines.filter(e => e.initial.length !== source.length); if (limited.length) toast('공정한 비교를 위해 모든 알고리즘에 같은 크기의 배열을 사용합니다.'); }
+function showCompareLimits(source) { const limited = compareEngines.filter(e => e.initial.length !== source.length); if (limited.length) toast('공정한 비교를 위해 모든 알고리즘에 같은 크기의 배열을 사용합니다.'); else if(compareEngines.some(e=>e.algorithm.altersInput||e.algorithm.mayNotFinish))toast('패러디: 값 삭제·변경이나 미완료가 발생할 수 있어 일반 정렬과 직접 비교하기 어렵습니다.'); }
 function handleCanvasHover(evt) {
   if (!engineView || !engine) return;
   const index = engineView.nearestIndex(evt.clientX), rect = evt.currentTarget.getBoundingClientRect();
@@ -93,7 +94,7 @@ function handleCanvasHover(evt) {
   readout.style.top = `${evt.clientY - rect.top}px`;
   readout.classList.add('visible');
 }
-function libraryCardMarkup(a) { return `<button type="button" class="gallery-card" data-action="library-select" data-id="${a.id}" aria-label="${escapeHtml(a.name)} 자세히 보기" title="${escapeHtml(a.name)}"><span class="gallery-card-name">${escapeHtml(shortName(a.id))}</span><span class="gallery-canvas"><canvas id="gallery-${a.id}" aria-hidden="true"></canvas></span><span class="gallery-card-bottom"><span class="gallery-status" aria-hidden="true"></span></span></button>`; }
+function libraryCardMarkup(a) { return `<button type="button" class="gallery-card${a.category==='패러디'?' parody-card':''}" data-action="library-select" data-id="${a.id}" aria-label="${escapeHtml(a.name)} 자세히 보기" title="${escapeHtml(a.name)}"><span class="gallery-card-name">${escapeHtml(a.name)}</span>${a.category==='패러디'?'<span class="gallery-card-type">패러디</span>':''}<span class="gallery-canvas"><canvas id="gallery-${a.id}" aria-hidden="true"></canvas></span><span class="gallery-card-bottom"><span class="gallery-status" aria-hidden="true"></span></span></button>`; }
 function renderLibraryGallery() {
   const root = $('#library-items'); if (!root) return;
   if (libraryObserver) libraryObserver.disconnect(); libraryObserver = null;
@@ -114,9 +115,9 @@ function renderLibraryPanel() {
 function openLibraryDetail(id) {
   const a=algorithmById[id]; if(!a || state.page!=='library')return;
   libraryDetailFocus=document.activeElement; state.librarySelected=id;
-  const current=libraryCards.find(c=>c.id===id); const seed=current ? current.engine.initial : generateData(libraryInputSize(a),'random');
+  const current=libraryCards.find(c=>c.id===id); const seed=current ? current.engine.initial : generateData(libraryInputSize(a),'random'); const desc=algorithmDescriptions[a.id]; const resultType=a.altersInput?'원본 값 변경':a.mayNotFinish?'완료 보장 없음':a.category==='패러디'?'실험적 구현':'원본 값 보존';
   libraryDetail={id,engine:new SortEngine(id,seed),view:null,playing:true,accumulator:0,lastDraw:0};
-  $('#modal-root').innerHTML=`<div class="overlay library-overlay" data-action="library-close"><section class="gallery-detail-modal" role="dialog" aria-modal="true" aria-labelledby="gallery-detail-title"><div class="gallery-detail-head"><div><h2 id="gallery-detail-title">${escapeHtml(a.name)}</h2><span class="gallery-detail-en">${escapeHtml(a.en)}</span></div>${ebutton('library-close','close','상세 닫기')}</div><div class="gallery-detail-stage"><canvas id="gallery-detail-canvas" role="img" aria-label="${escapeHtml(a.name)} 정렬 미리보기"></canvas></div><div class="gallery-detail-controls">${ebutton('library-detail-reset','reset','다시 정렬')}${ebutton('library-detail-play','pause','일시정지','icon-btn gallery-detail-play','id="gallery-detail-play"')}${ebutton('library-detail-step','step-forward','한 단계 진행')}${ebutton('library-detail-new','shuffle','새 배열')}</div><div class="gallery-detail-facts"><div><span>평균</span><strong>${escapeHtml(a.avg)}</strong></div><div><span>공간</span><strong>${escapeHtml(a.space)}</strong></div><div><span>유형</span><strong>${escapeHtml(a.category)}</strong></div><div><span>안정성</span><strong>${a.stable?'안정':'비안정'}</strong></div></div><button type="button" class="gallery-open" data-action="library-open">시각화로 이동 ${icon('arrow',16)}</button></section></div>`;
+  $('#modal-root').innerHTML=`<div class="overlay library-overlay" data-action="library-close"><section class="gallery-detail-modal" role="dialog" aria-modal="true" aria-labelledby="gallery-detail-title"><div class="gallery-detail-head"><div><h2 id="gallery-detail-title">${escapeHtml(a.name)}</h2><span class="gallery-detail-en">${escapeHtml(a.en)}</span></div>${ebutton('library-close','close','상세 닫기')}</div><div class="gallery-detail-stage"><canvas id="gallery-detail-canvas" role="img" aria-label="${escapeHtml(a.name)} 정렬 미리보기"></canvas></div><div class="gallery-detail-explain">${escapeHtml(desc.summary)}<span>${escapeHtml(desc.detail)}</span></div><div class="gallery-detail-controls">${ebutton('library-detail-reset','reset','다시 정렬')}${ebutton('library-detail-play','pause','일시정지','icon-btn gallery-detail-play','id="gallery-detail-play"')}${ebutton('library-detail-step','step-forward','한 단계 진행')}${ebutton('library-detail-new','shuffle','새 배열')}</div><div class="gallery-detail-facts"><div><span>평균</span><strong>${escapeHtml(a.avg)}</strong></div><div><span>공간</span><strong>${escapeHtml(a.space)}</strong></div><div><span>유형</span><strong>${escapeHtml(a.category)}</strong></div><div><span>${a.category==='패러디'?'결과':'안정성'}</span><strong>${a.category==='패러디'?resultType:a.stable?'안정':'비안정'}</strong></div></div><button type="button" class="gallery-open" data-action="library-open">시각화로 이동 ${icon('arrow',16)}</button></section></div>`;
   libraryDetail.view=new BarView($('#gallery-detail-canvas'));
   $('#modal-root [data-action="library-close"]:not(.overlay)')?.focus();
 }
@@ -128,9 +129,9 @@ function updateLibraryFrames(dt,now) {
     if(!card.visible||now<card.nextStart)continue;
     if(card.engine.completed && now-card.engine.finishedAt>LIBRARY_COMPLETE_HOLD_MS){card.engine=new SortEngine(card.id,generateData(libraryInputSize(algorithmById[card.id]),'random'));card.accumulator=0;card.lastDraw=0;}
     else if(!card.engine.completed)card.accumulator=advanceLibraryCard(card.engine,card.accumulator,dt,state.librarySpeed);
-    if(now-card.lastDraw>=33 || !card.lastDraw){card.view.draw(card.engine.values,{highlight:card.engine.highlight,completed:card.engine.completed&&!card.engine.failed,finishedAt:card.engine.finishedAt,now});card.lastDraw=now;card.node.classList.toggle('sorted',card.engine.completed&&!card.engine.failed);card.node.classList.toggle('failed',card.engine.failed);}
+    if(now-card.lastDraw>=33 || !card.lastDraw){card.view.draw(card.engine.values,{highlight:card.engine.highlight,completed:card.engine.completed&&!card.engine.failed,finishedAt:card.engine.finishedAt,now,altered:!!algorithmById[card.id]?.altersInput});card.lastDraw=now;card.node.classList.toggle('sorted',card.engine.completed&&!card.engine.failed);card.node.classList.toggle('failed',card.engine.failed);card.node.classList.toggle('altered',!!algorithmById[card.id]?.altersInput&&card.engine.completed&&!card.engine.failed);}
   }
-  if(libraryDetail){const d=libraryDetail;if(d.playing){if(d.engine.completed){d.playing=false;updateLibraryDetailPlay();}else{d.accumulator=advanceLibraryCard(d.engine,d.accumulator,dt,state.librarySpeed);if(d.engine.completed){d.playing=false;updateLibraryDetailPlay();}}}if(now-d.lastDraw>=20||!d.lastDraw){d.view.draw(d.engine.values,{highlight:d.engine.highlight,completed:d.engine.completed&&!d.engine.failed,finishedAt:d.engine.finishedAt,now});d.lastDraw=now;}}
+  if(libraryDetail){const d=libraryDetail;if(d.playing){if(d.engine.completed){d.playing=false;updateLibraryDetailPlay();}else{d.accumulator=advanceLibraryCard(d.engine,d.accumulator,dt,state.librarySpeed);if(d.engine.completed){d.playing=false;updateLibraryDetailPlay();}}}if(now-d.lastDraw>=20||!d.lastDraw){d.view.draw(d.engine.values,{highlight:d.engine.highlight,completed:d.engine.completed&&!d.engine.failed,finishedAt:d.engine.finishedAt,now,altered:!!algorithmById[d.id]?.altersInput});d.lastDraw=now;}}
 }
 function renderSettings() {
   const host = $('#settings-host'); if (!host) return;
@@ -182,7 +183,7 @@ function setMeters() { const meter = $('#meter'); if (!meter) return; const engs
 function updateStats() {
   const stats = $('#main-stats');
   if (stats && engine) { stats.innerHTML = `<span>비교 ${formatCount(engine.comparisons)}</span><span>교환 ${formatCount(engine.swaps)}</span><span>쓰기 ${formatCount(engine.writes)}</span>`; stats.classList.toggle('show',state.settings); }
-  compareEngines.forEach((e,i)=>{ const stat = $(`#compare-stat-${i}`), end = $(`#compare-end-${i}`); if (stat) stat.textContent=`비교 ${formatCount(e.comparisons)} · 교환 ${formatCount(e.swaps)}`; if (end) end.textContent=e.completed?(e.failed?'오류':'완료'):''; });
+  compareEngines.forEach((e,i)=>{ const stat = $(`#compare-stat-${i}`), end = $(`#compare-end-${i}`); if (stat) stat.textContent=`비교 ${formatCount(e.comparisons)} · 교환 ${formatCount(e.swaps)}`; if (end) end.textContent=e.completed?(e.failed?'오류':e.algorithm.altersInput?'입력 변형':'완료'):''; });
 }
 function revealFocus() { if (!state.focus) return; app.classList.add('reveal'); clearTimeout(focusTimeout); focusTimeout=setTimeout(()=>{ if (state.focus&&!state.settings&&!state.picker) app.classList.remove('reveal'); },2200); }
 
@@ -262,7 +263,7 @@ function renderFrame(now) {
         sound.consume(events,Math.max(1,...engine.values));
         if(!wasDone&&engine.completed) { state.playing=false;setPlayIcon();if(engine.failed)toast(engine.error);else sound.complete(); }
       }
-      engineView.draw(engine.values,{highlight:engine.highlight,completed:engine.completed&&!engine.failed,finishedAt:engine.finishedAt,now});
+      engineView.draw(engine.values,{highlight:engine.highlight,completed:engine.completed&&!engine.failed,finishedAt:engine.finishedAt,now,altered:!!engine.algorithm.altersInput});
       setMeters();updateStats();
     }
     if(state.page==='compare'&&compareEngines.length) {
@@ -272,13 +273,13 @@ function renderFrame(now) {
         compareEngines.forEach((e,i)=>{if(!e.completed) {const wasDone=e.completed, events=e.run(ops,3);if(i===state.compareSoundIndex)sound.consume(events,Math.max(1,...e.values));if(!wasDone&&e.completed&&i===state.compareSoundIndex&&!e.failed)sound.complete();}});
         if(compareEngines.every(e=>e.completed)){state.playing=false;setPlayIcon();const failed=compareEngines.filter(e=>e.failed);if(failed.length)toast(`${failed.length}개의 정렬이 중단되었습니다.`);}
       }
-      compareViews.forEach((view,i)=>view.draw(compareEngines[i].values,{highlight:compareEngines[i].highlight,completed:compareEngines[i].completed&&!compareEngines[i].failed,finishedAt:compareEngines[i].finishedAt,now}));
+      compareViews.forEach((view,i)=>view.draw(compareEngines[i].values,{highlight:compareEngines[i].highlight,completed:compareEngines[i].completed&&!compareEngines[i].failed,finishedAt:compareEngines[i].finishedAt,now,altered:!!compareEngines[i].algorithm.altersInput}));
       setMeters();updateStats();
     }
     if(state.page==='home') miniEngines.forEach((m,i)=>{
       if(m.engine.completed){if(!m.lastComplete)m.lastComplete=now;if(now-m.lastComplete>1050){const index=sortedDemoIds.indexOf(m.id);m.id=sortedDemoIds[(index+3+i)%sortedDemoIds.length];m.engine=new SortEngine(m.id,generateData(46, ['random','descending','nearly','duplicates'][i],Math.random()));m.lastComplete=0;const name=$('#mini-name-'+i);if(name)name.textContent=shortName(m.id);}}
       else m.engine.run(36,2);
-      m.view.draw(m.engine.values,{highlight:m.engine.highlight,completed:m.engine.completed,finishedAt:m.engine.finishedAt,now});
+      m.view.draw(m.engine.values,{highlight:m.engine.highlight,completed:m.engine.completed,finishedAt:m.engine.finishedAt,now,altered:!!m.engine.algorithm.altersInput});
     });
     if(state.page==='library')updateLibraryFrames(dt,now);
   }

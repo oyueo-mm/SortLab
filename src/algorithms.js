@@ -44,6 +44,31 @@ function* bogo(a) { let state = (a.reduce((s, v, i) => (s * 31 + v + i) >>> 0, 1
 function* strand(a) { const remaining = a.slice(); const output = []; while (remaining.length) { const strand = [remaining.shift()]; for (let i = 0; i < remaining.length;) { yield C(Math.min(a.length - 1, i), Math.min(a.length - 1, strand.length - 1)); if (remaining[i] >= strand[strand.length - 1]) strand.push(remaining.splice(i, 1)[0]); else i++; } const merged = []; let i = 0, j = 0; while (i < output.length && j < strand.length) { yield C(Math.min(a.length - 1, i), Math.min(a.length - 1, j)); merged.push(output[i] <= strand[j] ? output[i++] : strand[j++]); } while (i < output.length) merged.push(output[i++]); while (j < strand.length) merged.push(strand[j++]); output.splice(0, output.length, ...merged); for (let k = 0; k < output.length; k++) yield* write(a, k, output[k]); } }
 function* bead(a) { const max = Math.max(...a); const counts = Array.from({ length: max }, (_, col) => a.filter(v => v > col).length); const sorted = Array.from({ length: a.length }, (_, row) => counts.filter(v => v > a.length - row - 1).length); for (let i = 0; i < sorted.length; i++) { if (i) yield C(i - 1, i); yield* write(a, i, sorted[i]); } }
 
+
+// Additional real sorts; each yields the same reversible events as the original catalog.
+function* exchangeSort(a) { for(let i=0;i<a.length-1;i++)for(let j=i+1;j<a.length;j++){yield C(i,j);if(a[i]>a[j])yield* swap(a,i,j);} }
+function* doubleSelection(a) { for(let lo=0,hi=a.length-1;lo<hi;lo++,hi--){let min=lo,max=lo;for(let i=lo+1;i<=hi;i++){yield C(i,min);if(a[i]<a[min])min=i;yield C(i,max);if(a[i]>a[max])max=i;}yield* swap(a,lo,min);if(max===lo)max=min;yield* swap(a,hi,max);} }
+function* bingoSort(a) { let at=0;while(at<a.length){let min=Infinity;for(let i=at;i<a.length;i++){yield C(at,i);if(a[i]<min)min=a[i];}for(let i=at;i<a.length;i++){yield C(at,i);if(a[i]===min){yield* swap(a,at,i);at++;}}} }
+function* circleSort(a) { function* pass(lo,hi){if(lo>=hi)return false;let left=lo,right=hi,changed=false;while(left<right){yield C(left,right);if(a[left]>a[right]){yield* swap(a,left,right);changed=true;}left++;right--;}if(left===right&&right+1<=hi){yield C(left,right+1);if(a[left]>a[right+1]){yield* swap(a,left,right+1);changed=true;}}const mid=Math.floor((hi-lo)/2);const one=yield* pass(lo,lo+mid);const two=yield* pass(lo+mid+1,hi);return changed||one||two;}while(yield* pass(0,a.length-1)){} }
+function* oddEvenMergeSort(a) { function* cmp(i,j){yield C(i,j);if(a[i]>a[j])yield* swap(a,i,j);}function* merge(lo,n,r){const m=r*2;if(m<n){yield* merge(lo,n,m);yield* merge(lo+r,n,m);for(let i=lo+r;i+r<lo+n;i+=m)yield* cmp(i,i+r);}else yield* cmp(lo,lo+r);}function* sort(lo,n){if(n<=1)return;const half=n/2;yield* sort(lo,half);yield* sort(lo+half,half);yield* merge(lo,n,1);}yield* sort(0,a.length); }
+function* patienceSort(a) { const piles=[];for(let i=0;i<a.length;i++){const v=a[i];let lo=0,hi=piles.length;while(lo<hi){const mid=(lo+hi)>>1;yield C(i,Math.min(a.length-1,mid));if(piles[mid][piles[mid].length-1]>=v)hi=mid;else lo=mid+1;}if(!piles[lo])piles[lo]=[];piles[lo].push(v);}for(let k=0;k<a.length;k++){let chosen=-1;for(let i=0;i<piles.length;i++)if(piles[i].length){if(chosen>=0)yield C(Math.min(k,a.length-1),Math.min(a.length-1,i));if(chosen<0||piles[i][piles[i].length-1]<piles[chosen][piles[chosen].length-1])chosen=i;}yield* write(a,k,piles[chosen].pop());} }
+function* tournamentSort(a) { const n=a.length,cap=2**Math.ceil(Math.log2(Math.max(1,n))),source=[...a],tree=Array(2*cap).fill(-1);const choose=(x,y)=>x<0?y:y<0?x:(source[x]<=source[y]?x:y);for(let i=0;i<n;i++)tree[cap+i]=i;for(let i=cap-1;i>0;i--){if(tree[2*i]>=0&&tree[2*i+1]>=0)yield C(tree[2*i],tree[2*i+1]);tree[i]=choose(tree[2*i],tree[2*i+1]);}for(let k=0;k<n;k++){const win=tree[1];yield* write(a,k,source[win]);let idx=cap+win;tree[idx]=-1;for(idx>>=1;idx>0;idx>>=1){if(tree[2*idx]>=0&&tree[2*idx+1]>=0)yield C(tree[2*idx],tree[2*idx+1]);tree[idx]=choose(tree[2*idx],tree[2*idx+1]);}} }
+function* threeWayQuick(a) { function* sort(lo,hi){if(lo>=hi)return;const pivot=a[lo];yield P(lo);let lt=lo,i=lo+1,gt=hi;while(i<=gt){yield C(i,lt);if(a[i]<pivot){yield* swap(a,lt++,i++);}else if(a[i]>pivot){yield* swap(a,i,gt--);}else i++;}yield* sort(lo,lt-1);yield* sort(gt+1,hi);}yield* sort(0,a.length-1); }
+function* binaryQuick(a) { const max=Math.max(0,...a);function* sort(lo,hi,bit){if(hi-lo<=1||bit<0)return;let i=lo,j=hi-1;while(i<=j){while(i<=j&&((a[i]>>bit)&1)===0){yield C(i,Math.max(lo,j));i++;}while(i<=j&&((a[j]>>bit)&1)===1){yield C(Math.min(i,hi-1),j);j--;}if(i<j)yield* swap(a,i++,j--);}yield* sort(lo,i,bit-1);yield* sort(i,hi,bit-1);}yield* sort(0,a.length,Math.floor(Math.log2(Math.max(1,max)))); }
+function* blockInsertionSort(a) { const block=8;for(let lo=0;lo<a.length;lo+=block){const hi=Math.min(a.length,lo+block);for(let i=lo+1;i<hi;i++){const v=a[i];let j=i;while(j>lo){yield C(j-1,j);if(a[j-1]<=v)break;yield* write(a,j,a[j-1]);j--;}yield* write(a,j,v);}}for(let size=block;size<a.length;size*=2)for(let lo=0;lo<a.length;lo+=size*2){const mid=Math.min(a.length,lo+size),hi=Math.min(a.length,lo+2*size),left=a.slice(lo,mid),right=a.slice(mid,hi);let i=0,j=0,k=lo;while(i<left.length&&j<right.length){yield C(lo+i,mid+j);yield* write(a,k++,left[i]<=right[j]?left[i++]:right[j++]);}while(i<left.length)yield* write(a,k++,left[i++]);while(j<right.length)yield* write(a,k++,right[j++]);} }
+// These satirical algorithms are explicitly labeled; some violate the permutation invariant of sorting.
+const satireRandom=a=>{let seed=a.reduce((s,v,i)=>(Math.imul(s,1664525)+v+i+1013904223)>>>0,123456789);return ()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};};
+const D=i=>({t:'d',i});
+function* stalinSort(a) { let i=1;while(i<a.length){yield C(i-1,i);if(a[i]<a[i-1]){a.splice(i,1);yield D(i);}else i++;} }
+function* thanosSort(a) { const rand=satireRandom(a);while(a.length>1){let sorted=true;for(let i=1;i<a.length;i++){yield C(i-1,i);if(a[i-1]>a[i])sorted=false;}if(sorted)return;const remove=Math.floor(a.length/2);const indices=Array.from({length:a.length},(_,i)=>i);for(let i=indices.length-1;i>0;i--){const j=Math.floor(rand()*(i+1));[indices[i],indices[j]]=[indices[j],indices[i]];}for(const index of indices.slice(0,remove).sort((x,y)=>y-x)){a.splice(index,1);yield D(index);}} }
+function* socialismSort(a) { const mean=Math.round(a.reduce((s,v)=>s+v,0)/Math.max(1,a.length));for(let i=0;i<a.length;i++){yield C(i,Math.max(0,i-1));yield* write(a,i,mean);} }
+function* capitalismSort(a) { for(let end=a.length-1;end>0;end--){let richest=0;for(let i=1;i<=end;i++){yield C(richest,i);if(a[i]>a[richest])richest=i;}yield* swap(a,richest,end);} }
+function* sleepSortDemo(a) { const schedule=a.map((v,i)=>({v,i})).sort((x,y)=>x.v-y.v||x.i-y.i);let tick=0;for(const job of schedule){if(job.v!==tick){yield C(job.i,job.i);tick=job.v;} }for(let i=0;i<schedule.length;i++)yield* write(a,i,schedule[i].v); }
+function* bozoSort(a) { const rand=satireRandom(a);for(let tries=0;tries<80000;tries++){let sorted=true;for(let i=1;i<a.length;i++){yield C(i-1,i);if(a[i-1]>a[i])sorted=false;}if(sorted)return;const i=Math.floor(rand()*a.length),j=Math.floor(rand()*a.length);yield* swap(a,i,j);}throw new Error('보조 정렬의 시도 한도에 도달했습니다.'); }
+function* miracleSort(a) { for(let attempt=0;attempt<72;attempt++){let sorted=true;for(let i=1;i<a.length;i++){yield C(i-1,i);if(a[i-1]>a[i])sorted=false;}if(sorted)return;}throw new Error('기적이 일어나지 않아 정렬을 종료했습니다.'); }
+function* quantumBogoDemo(a) { const sorted=[...a].sort((x,y)=>x-y);for(let i=0;i<a.length;i++){yield P(i);yield* write(a,i,sorted[i]);} }
+function* slowSort(a) { function* sort(lo,hi){if(lo>=hi)return;const mid=(lo+hi)>>1;yield* sort(lo,mid);yield* sort(mid+1,hi);yield C(mid,hi);if(a[mid]>a[hi])yield* swap(a,mid,hi);yield* sort(lo,hi-1);}yield* sort(0,a.length-1); }
+
 export const algorithms = [
   { id:'bubble', name:'버블 정렬', en:'Bubble Sort', category:'기초', avg:'O(n²)', space:'O(1)', stable:true, fn:bubble },
   { id:'selection', name:'선택 정렬', en:'Selection Sort', category:'기초', avg:'O(n²)', space:'O(1)', stable:false, fn:selection },
@@ -74,6 +99,26 @@ export const algorithms = [
   { id:'stooge', name:'스투지 정렬', en:'Stooge Sort', category:'특수', avg:'O(n^2.71)', space:'O(log n)', stable:false, fn:stooge, maxSize:64 },
   { id:'bogo', name:'보고 정렬', en:'Bogo Sort', category:'특수', avg:'O(n·n!)', space:'O(1)', stable:false, fn:bogo, maxSize:5 },
   { id:'strand', name:'스트랜드 정렬', en:'Strand Sort', category:'특수', avg:'O(n²)', space:'O(n)', stable:true, fn:strand },
+
+  { id:'exchange', name:'교환 정렬', en:'Exchange Sort', category:'기초', avg:'O(n²)', space:'O(1)', stable:false, fn:exchangeSort },
+  { id:'doubleSelection', name:'양방향 선택 정렬', en:'Double Selection Sort', category:'기초', avg:'O(n²)', space:'O(1)', stable:false, fn:doubleSelection },
+  { id:'bingo', name:'빙고 정렬', en:'Bingo Sort', category:'기초', avg:'O(n²)', space:'O(1)', stable:false, fn:bingoSort },
+  { id:'circle', name:'원형 정렬', en:'Circle Sort', category:'고급', avg:'O(n log² n)~O(n²)', space:'O(log n)', stable:false, fn:circleSort },
+  { id:'oddEvenMerge', name:'홀짝 병합 네트워크 정렬', en:'Odd-Even Merge Sort', category:'고급', avg:'O(n log² n)', space:'O(log n)', stable:false, fn:oddEvenMergeSort, powerOfTwo:true },
+  { id:'patience', name:'패이션스 정렬', en:'Patience Sort', category:'고급', avg:'이 구현: O(n²)', space:'O(n)', stable:false, fn:patienceSort },
+  { id:'tournament', name:'토너먼트 정렬', en:'Tournament Sort', category:'고급', avg:'O(n log n)', space:'O(n)', stable:false, fn:tournamentSort },
+  { id:'threeWayQuick', name:'3방향 퀵 정렬', en:'Three-Way Quick Sort', category:'고급', avg:'O(n log n)', space:'O(log n)', stable:false, fn:threeWayQuick },
+  { id:'binaryQuick', name:'이진 퀵 정렬', en:'Binary Quick Sort', category:'분포', avg:'O(bn)', space:'O(b)', stable:false, fn:binaryQuick },
+  { id:'blockInsertion', name:'블록 삽입 병합 정렬', en:'Block Insertion Merge Sort', category:'하이브리드', avg:'O(n log n)', space:'O(n)', stable:true, fn:blockInsertionSort },
+  { id:'stalin', name:'스탈린 정렬', en:'Stalin Sort', category:'패러디', avg:'O(n)', space:'O(1)', stable:true, fn:stalinSort, altersInput:true, maxSize:100 },
+  { id:'thanos', name:'타노스 정렬', en:'Thanos Sort', category:'패러디', avg:'비교 횟수는 입력에 따라 변동', space:'O(n)', stable:false, fn:thanosSort, altersInput:true, maxSize:100 },
+  { id:'socialism', name:'사회주의 정렬', en:'Socialism Sort (SortLab parody)', category:'패러디', avg:'O(n)', space:'O(1)', stable:false, fn:socialismSort, altersInput:true, customParody:true },
+  { id:'capitalism', name:'자본주의 정렬', en:'Capitalism Sort (SortLab parody)', category:'패러디', avg:'O(n²)', space:'O(1)', stable:false, fn:capitalismSort, customParody:true },
+  { id:'sleep', name:'수면 정렬', en:'Sleep Sort (simulated)', category:'패러디', avg:'이 시뮬레이션: O(n log n)', space:'O(n)', stable:false, fn:sleepSortDemo, customParody:true },
+  { id:'bozo', name:'보조 정렬', en:'Bozo Sort', category:'패러디', avg:'무작위 반복 · 비효율적', space:'O(1)', stable:false, fn:bozoSort, maxSize:5 },
+  { id:'miracle', name:'기적 정렬', en:'Miracle Sort', category:'패러디', avg:'실행 종료 보장 없음', space:'O(1)', stable:false, fn:miracleSort, mayNotFinish:true, maxSize:48 },
+  { id:'quantumBogo', name:'양자 보고 정렬', en:'Quantum Bogo Sort (simulation)', category:'패러디', avg:'개념적 농담 · 이 구현 O(n log n)', space:'O(n)', stable:false, fn:quantumBogoDemo, customParody:true },
+  { id:'slow', name:'슬로 정렬', en:'Slowsort', category:'패러디', avg:'초다항식', space:'O(n)', stable:false, fn:slowSort, maxSize:12 },
   { id:'bead', name:'비드 정렬', en:'Bead Sort', category:'특수', avg:'구현 방식에 따라 다름', space:'O(n + k)', stable:false, fn:bead, maxSize:80 }
 ];
 

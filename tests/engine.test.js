@@ -21,7 +21,7 @@ test('undo/redo restores array and counters for comparison, swap and write event
 });
 
 test('performance on length 100 and all major input patterns', () => {
-  for (const a of algorithms.filter(a => !['bogo','stooge'].includes(a.id))) {
+  for (const a of algorithms.filter(a => !a.altersInput && !a.mayNotFinish && !['bogo','bozo','stooge','slow'].includes(a.id))) {
     for(const pattern of ['random','ascending','descending','duplicates','nearly']) {
       const data=generateData(Math.min(100,a.maxSize||100),pattern,0.18272);
       const e=new SortEngine(a.id,data);
