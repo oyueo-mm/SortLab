@@ -1,0 +1,11 @@
+{
+  "name": "sortlab",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "다양한 정렬 알고리즘을 보고 듣는 미니멀한 시각화 도감",
+  "scripts": {
+    "dev": "python3 -m http.server 4173",
+    "test": "node --test tests/*.test.js"
+  }
+}
