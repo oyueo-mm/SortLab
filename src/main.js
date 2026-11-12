@@ -32,7 +32,7 @@ function renderShell() {
   app.innerHTML = `<div class="app${state.sidebar ? ' expanded' : ''}" id="layout"><aside class="rail" aria-label="탐색 메뉴">
     <div class="brand"><span class="brand-text">SortLab</span>${ebutton('sidebar', 'panel', '메뉴 열기 또는 닫기', 'rail-btn')}</div>
     <nav class="nav-list" aria-label="메인 메뉴">${[
-      ['home', 'home', '홈'], ['visual', 'bars', '시각화'], ['compare', 'compare', '비교'], ['library', 'book', '도감']
+      ['home', 'home', '홈'], ['library', 'book', '도감'], ['visual', 'bars', '시각화'], ['compare', 'compare', '비교']
     ].map(([id, glyph, label]) => `<button type="button" data-action="nav" data-page="${id}" class="rail-btn nav${state.page===id?' active':''}" title="${label}" aria-label="${label}" ${state.page===id?'aria-current="page"':''}>${icon(glyph)}<span class="nav-name">${label}</span></button>`).join('')}</nav>
     <div class="rail-bottom"><a class="rail-btn nav" href="https://github.com/oyueo-mm/SortLab" target="_blank" rel="noopener noreferrer" title="GitHub" aria-label="GitHub">${icon('github')}<span class="nav-name">GitHub</span></a><button class="rail-btn nav" data-action="settings-nav" title="설정" aria-label="설정">${icon('settings')}<span class="nav-name">설정</span></button></div>
   </aside><main class="workspace" id="workspace"><button class="icon-btn mobile-menu" data-action="sidebar" aria-label="메뉴">${icon('panel')}</button><div id="screen"></div></main></div><div id="modal-root"></div><div class="toast" id="toast" role="status" aria-live="polite"></div>`;
