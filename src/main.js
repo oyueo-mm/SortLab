@@ -8,10 +8,11 @@ import { LIBRARY_DEFAULT_SPEED, LIBRARY_SPEEDS, LIBRARY_COMPLETE_HOLD_MS, librar
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const app = $('#app');
-const initial = { page: 'home', algo: 'quickHoare', pattern: 'random', count: 100, speed: 82, style: 'bars', soundOn: true, volume: 30, soundStyle: 'retro', sidebar: false };
+const sidebarMedia = window.matchMedia('(min-width: 621px)');
+const initial = { page: 'home', algo: 'quickHoare', pattern: 'random', count: 100, speed: 82, style: 'bars', soundOn: true, volume: 30, soundStyle: 'retro', sidebar: sidebarMedia.matches };
 let cached = {};
 try { cached = JSON.parse(localStorage.getItem('sortlab:prefs') || '{}') || {}; } catch { /* private browsing */ }
-const state = { ...initial, ...cached, page: 'home', sidebar: false, settings: false, picker: false, pickerCategory: '전체', pickerQuery: '', pickerTarget: 'main', librarySelected: 'quickHoare', libraryQuery: '', libraryCategory: '전체', librarySpeed: LIBRARY_SPEEDS.includes(Number(cached.librarySpeed)) ? Number(cached.librarySpeed) : LIBRARY_DEFAULT_SPEED, libraryPanel: '', compareIds: ['bubble', 'quickHoare', 'merge', 'heap'], compareSoundIndex: 1, playing: false, focus: false };
+const state = { ...initial, ...cached, page: 'home', sidebar: sidebarMedia.matches, settings: false, picker: false, pickerCategory: '전체', pickerQuery: '', pickerTarget: 'main', librarySelected: 'quickHoare', libraryQuery: '', libraryCategory: '전체', librarySpeed: LIBRARY_SPEEDS.includes(Number(cached.librarySpeed)) ? Number(cached.librarySpeed) : LIBRARY_DEFAULT_SPEED, libraryPanel: '', compareIds: ['bubble', 'quickHoare', 'merge', 'heap'], compareSoundIndex: 1, playing: false, focus: false };
 const sound = new SortAudio();
 sound.enabled = state.soundOn;
 sound.volume = state.volume / 100;
@@ -158,7 +159,7 @@ function renderPickerItems() {
   const filtered = algorithms.filter(a=>(state.pickerCategory==='전체'||a.category===state.pickerCategory)&&`${a.name} ${a.en}`.toLowerCase().includes(state.pickerQuery.toLowerCase().trim()));
   items.innerHTML = filtered.length ? filtered.map(a=>`<button class="picker-item" data-action="picker-select" data-id="${a.id}"><span>${escapeHtml(a.name)}</span><small>${escapeHtml(a.avg)}</small></button>`).join('') : '<div class="empty-text">결과가 없습니다.</div>';
 }
-function navigation(page) { if (!['home','visual','compare','library'].includes(page)) return; state.page = page; state.sidebar = false; $('#layout').classList.remove('expanded'); renderPage(); }
+function navigation(page) { if (!['home','visual','compare','library'].includes(page)) return; state.page = page; if (!sidebarMedia.matches) { state.sidebar = false; $('#layout').classList.remove('expanded'); } renderPage(); }
 function resetCurrent(changeArray = false) {
   state.playing = false;
   opAccumulator = 0;
@@ -285,4 +286,5 @@ function renderFrame(now) {
 }
 
 renderShell();
+sidebarMedia.addEventListener('change',event=>{state.sidebar=event.matches;$('#layout')?.classList.toggle('expanded',state.sidebar);});
 requestAnimationFrame(renderFrame);
