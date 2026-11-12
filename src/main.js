@@ -5,7 +5,7 @@ import { BarView } from './visual.js';
 import { SortAudio } from './audio.js';
 import { icon } from './icons.js';
 import { algorithmDescriptions } from './descriptions.js';
-import { LIBRARY_DEFAULT_SPEED, LIBRARY_SPEEDS, LIBRARY_COMPLETE_HOLD_MS, libraryInputSize, libraryEventsPerSecond, filterLibraryAlgorithms, advanceLibraryCard } from './library.js';
+import { LIBRARY_DEFAULT_SPEED, LIBRARY_SPEEDS, LIBRARY_COMPLETE_HOLD_MS, libraryInputSize, libraryEventsPerSecond, filterLibraryAlgorithms, algorithmsInCollection, isExperimentalSort, advanceLibraryCard } from './library.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const app = $('#app');
@@ -13,14 +13,17 @@ const sidebarMedia = window.matchMedia('(min-width: 621px)');
 const initial = { page: 'home', algo: 'quickHoare', pattern: 'random', count: 100, speed: 82, style: 'bars', soundOn: true, volume: 30, soundStyle: 'retro', sidebar: sidebarMedia.matches };
 let cached = {};
 try { cached = JSON.parse(localStorage.getItem('sortlab:prefs') || '{}') || {}; } catch { /* private browsing */ }
-const state = { ...initial, ...cached, page: 'home', sidebar: sidebarMedia.matches, settings: false, picker: false, pickerCategory: '전체', pickerQuery: '', pickerTarget: 'main', librarySelected: 'quickHoare', libraryQuery: '', libraryCategory: '전체', librarySpeed: LIBRARY_SPEEDS.includes(Number(cached.librarySpeed)) ? Number(cached.librarySpeed) : LIBRARY_DEFAULT_SPEED, libraryPanel: '', compareIds: ['bubble', 'quickHoare', 'merge', 'heap'], compareSoundIndex: 1, playing: false, focus: false };
+const state = { ...initial, ...cached, page: 'home', sidebar: sidebarMedia.matches, settings: false, picker: false, pickerCategory: '전체', pickerQuery: '', pickerTarget: 'main', librarySelected: 'quickHoare', libraryQuery: '', experimentQuery: '', libraryCategory: '전체', librarySpeed: LIBRARY_SPEEDS.includes(Number(cached.librarySpeed)) ? Number(cached.librarySpeed) : LIBRARY_DEFAULT_SPEED, libraryPanel: '', compareIds: ['bubble', 'quickHoare', 'merge', 'heap'], compareSoundIndex: 1, playing: false, focus: false };
 const sound = new SortAudio();
 sound.enabled = state.soundOn;
 sound.volume = state.volume / 100;
 sound.style = state.soundStyle;
 let engine = null, engineView = null, compareEngines = [], compareViews = [], miniEngines = [], libraryCards = [], libraryObserver = null, libraryDetail = null, libraryDetailFocus = null;
 let lastFrame = 0, opAccumulator = 0, toastTimeout = null, focusTimeout = null;
-const categories = ['전체', '기초', '고급', '분포', '하이브리드', '특수', '패러디'];
+const categories = ['전체', '기초', '고급', '분포', '하이브리드', '특수'];
+const standardAlgorithms = algorithmsInCollection(algorithms);
+const experimentAlgorithms = algorithmsInCollection(algorithms,'experiment');
+if (!algorithmById[state.algo] || isExperimentalSort(algorithmById[state.algo])) state.algo = 'quickHoare';
 const sortedDemoIds = ['bubble', 'insertion', 'quickHoare', 'merge', 'heap', 'shell', 'cocktail', 'radixLsd', 'selection', 'timsort', 'pancake', 'comb'];
 
 function persist() { const { algo, pattern, count, speed, style, soundOn, volume, soundStyle, librarySpeed } = state; try { localStorage.setItem('sortlab:prefs', JSON.stringify({ algo, pattern, count, speed, style, soundOn, volume, soundStyle, librarySpeed })); } catch { /* privacy mode */ } }
@@ -34,7 +37,7 @@ function renderShell() {
     <div class="brand"><span class="brand-text">SortLab</span>${ebutton('sidebar', 'panel', '메뉴 열기 또는 닫기', 'rail-btn')}</div>
     <nav class="nav-list" aria-label="메인 메뉴">${[
       ['home', 'home', '홈'], ['library', 'book', '도감'], ['visual', 'bars', '시각화'], ['compare', 'compare', '비교']
-    ].map(([id, glyph, label]) => `<button type="button" data-action="nav" data-page="${id}" class="rail-btn nav${state.page===id?' active':''}" title="${label}" aria-label="${label}" ${state.page===id?'aria-current="page"':''}>${icon(glyph)}<span class="nav-name">${label}</span></button>`).join('')}</nav>
+    ].map(([id, glyph, label]) => `<button type="button" data-action="nav" data-page="${id}" class="rail-btn nav${state.page===id?' active':''}" title="${label}" aria-label="${label}" ${state.page===id?'aria-current="page"':''}>${icon(glyph)}<span class="nav-name">${label}</span></button>`).join('')}<div class="nav-separator" aria-hidden="true"></div><button type="button" data-action="nav" data-page="experiment" class="rail-btn nav${state.page==='experiment'?' active':''}" title="패러디·실험" aria-label="패러디·실험 (일반 정렬과 별도)" ${state.page==='experiment'?'aria-current="page"':''}>${icon('sparkles')}<span class="nav-name">패러디·실험</span></button></nav>
     <div class="rail-bottom"><a class="rail-btn nav" href="https://github.com/oyueo-mm/SortLab" target="_blank" rel="noopener noreferrer" title="GitHub" aria-label="GitHub">${icon('github')}<span class="nav-name">GitHub</span></a><button class="rail-btn nav" data-action="settings-nav" title="설정" aria-label="설정">${icon('settings')}<span class="nav-name">설정</span></button></div>
   </aside><main class="workspace" id="workspace"><button class="icon-btn mobile-menu" data-action="sidebar" aria-label="메뉴">${icon('panel')}</button><div id="screen"></div></main></div><div id="modal-root"></div><div class="toast" id="toast" role="status" aria-live="polite"></div>`;
   renderPage();
@@ -73,8 +76,9 @@ function renderPage() {
     compareEngines = state.compareIds.map(id => new SortEngine(id,sharedData));
     compareViews = compareEngines.map((_,i)=>new BarView($('#compare-'+i),{compact:true}));
     showCompareLimits(data);
-  } else if (state.page === 'library') {
-    el.innerHTML = `<section class="screen library-screen gallery-screen"><div class="gallery-toolbar"><label class="gallery-search">${icon('search',16)}<input id="library-query" type="search" placeholder="검색" aria-label="알고리즘 검색" autocomplete="off" value="${escapeHtml(state.libraryQuery)}" /></label><span id="gallery-count" class="gallery-count" aria-live="polite">${algorithms.length}</span>${ebutton('library-filter','filter','정렬 종류 필터','icon-btn gallery-tool')}${ebutton('library-settings','settings','미리보기 속도','icon-btn gallery-tool')}</div><div id="gallery-panel" class="gallery-panel" hidden></div><div class="gallery-grid" id="library-items"></div></section>`;
+  } else if (state.page === 'library' || state.page === 'experiment') {
+    const experimental = state.page === 'experiment';
+    el.innerHTML = `<section class="screen library-screen gallery-screen${experimental?' experiment-screen':''}">${experimental?'<div class="experiment-intro"><strong>패러디·실험</strong><span>일반 정렬과 다릅니다. 값을 삭제·변경하거나 정렬을 완료하지 못할 수 있어요.</span></div>':''}<div class="gallery-toolbar"><label class="gallery-search">${icon('search',16)}<input id="library-query" type="search" placeholder="검색" aria-label="${experimental?'패러디 실험':'정렬 알고리즘'} 검색" autocomplete="off" value="${escapeHtml(experimental?state.experimentQuery:state.libraryQuery)}" /></label><span id="gallery-count" class="gallery-count" aria-live="polite">${experimental?experimentAlgorithms.length:standardAlgorithms.length}</span>${experimental?'':ebutton('library-filter','filter','정렬 종류 필터','icon-btn gallery-tool')}${ebutton('library-settings','settings','미리보기 속도','icon-btn gallery-tool')}</div><div id="gallery-panel" class="gallery-panel" hidden></div><div class="gallery-grid" id="library-items"></div></section>`;
     renderLibraryGallery();
   }
   document.querySelectorAll('.rail-btn.nav[data-page]').forEach(btn => { btn.classList.toggle('active',btn.dataset.page===state.page); btn.toggleAttribute('aria-current',btn.dataset.page===state.page); });
@@ -94,11 +98,11 @@ function handleCanvasHover(evt) {
   readout.style.top = `${evt.clientY - rect.top}px`;
   readout.classList.add('visible');
 }
-function libraryCardMarkup(a) { return `<button type="button" class="gallery-card${a.category==='패러디'?' parody-card':''}" data-action="library-select" data-id="${a.id}" aria-label="${escapeHtml(a.name)} 자세히 보기" title="${escapeHtml(a.name)}"><span class="gallery-card-name">${escapeHtml(a.name)}</span>${a.category==='패러디'?'<span class="gallery-card-type">패러디</span>':''}<span class="gallery-canvas"><canvas id="gallery-${a.id}" aria-hidden="true"></canvas></span><span class="gallery-card-bottom"><span class="gallery-status" aria-hidden="true"></span></span></button>`; }
+function libraryCardMarkup(a) { return `<button type="button" class="gallery-card${a.category==='패러디'?' parody-card':''}" data-action="library-select" data-id="${a.id}" aria-label="${escapeHtml(a.name)} 자세히 보기" title="${escapeHtml(a.name)}"><span class="gallery-card-name">${escapeHtml(a.name)}</span>${a.category==='패러디'?'<span class="gallery-card-type">실험</span>':''}<span class="gallery-canvas"><canvas id="gallery-${a.id}" aria-hidden="true"></canvas></span><span class="gallery-card-bottom"><span class="gallery-status" aria-hidden="true"></span></span></button>`; }
 function renderLibraryGallery() {
   const root = $('#library-items'); if (!root) return;
   if (libraryObserver) libraryObserver.disconnect(); libraryObserver = null;
-  const items = filterLibraryAlgorithms(algorithms, state.libraryQuery, state.libraryCategory);
+  const experimental=state.page==='experiment';const items = filterLibraryAlgorithms(algorithms, experimental?state.experimentQuery:state.libraryQuery, experimental?'전체':state.libraryCategory, experimental?'experiment':'standard');
   const count = $('#gallery-count'); if (count) count.textContent = items.length;
   root.innerHTML = items.length ? items.map(libraryCardMarkup).join('') : `<div class="gallery-empty">검색 결과가 없습니다.</div>`;
   const start = performance.now();
@@ -113,11 +117,11 @@ function renderLibraryPanel() {
   if(state.libraryPanel==='filter')el.innerHTML=`<div class="gallery-panel-title">분류</div><div class="gallery-options">${categories.map(c=>`<button type="button" class="gallery-option ${c===state.libraryCategory?'active':''}" data-action="library-category" data-value="${c}" aria-pressed="${c===state.libraryCategory}">${c}</button>`).join('')}</div>`;
 }
 function openLibraryDetail(id) {
-  const a=algorithmById[id]; if(!a || state.page!=='library')return;
+  const a=algorithmById[id]; if(!a || !['library','experiment'].includes(state.page) || isExperimentalSort(a)!==(state.page==='experiment'))return;
   libraryDetailFocus=document.activeElement; state.librarySelected=id;
-  const current=libraryCards.find(c=>c.id===id); const seed=current ? current.engine.initial : generateData(libraryInputSize(a),'random'); const desc=algorithmDescriptions[a.id]; const resultType=a.altersInput?'원본 값 변경':a.mayNotFinish?'완료 보장 없음':a.category==='패러디'?'실험적 구현':'원본 값 보존';
+  const current=libraryCards.find(c=>c.id===id); const seed=current ? current.engine.initial : generateData(libraryInputSize(a),'random'); const desc=algorithmDescriptions[a.id]; const resultType=a.altersInput?'원본 값 변경':a.mayNotFinish?'완료 보장 없음':a.category==='패러디'?'원본 보존 · 정렬 완료':'원본 값 보존';
   libraryDetail={id,engine:new SortEngine(id,seed),view:null,playing:true,accumulator:0,lastDraw:0};
-  $('#modal-root').innerHTML=`<div class="overlay library-overlay" data-action="library-close"><section class="gallery-detail-modal" role="dialog" aria-modal="true" aria-labelledby="gallery-detail-title"><div class="gallery-detail-head"><div><h2 id="gallery-detail-title">${escapeHtml(a.name)}</h2><span class="gallery-detail-en">${escapeHtml(a.en)}</span></div>${ebutton('library-close','close','상세 닫기')}</div><div class="gallery-detail-stage"><canvas id="gallery-detail-canvas" role="img" aria-label="${escapeHtml(a.name)} 정렬 미리보기"></canvas></div><div class="gallery-detail-explain">${escapeHtml(desc.summary)}<span>${escapeHtml(desc.detail)}</span></div><div class="gallery-detail-controls">${ebutton('library-detail-reset','reset','다시 정렬')}${ebutton('library-detail-play','pause','일시정지','icon-btn gallery-detail-play','id="gallery-detail-play"')}${ebutton('library-detail-step','step-forward','한 단계 진행')}${ebutton('library-detail-new','shuffle','새 배열')}</div><div class="gallery-detail-facts"><div><span>평균</span><strong>${escapeHtml(a.avg)}</strong></div><div><span>공간</span><strong>${escapeHtml(a.space)}</strong></div><div><span>유형</span><strong>${escapeHtml(a.category)}</strong></div><div><span>${a.category==='패러디'?'결과':'안정성'}</span><strong>${a.category==='패러디'?resultType:a.stable?'안정':'비안정'}</strong></div></div><button type="button" class="gallery-open" data-action="library-open">시각화로 이동 ${icon('arrow',16)}</button></section></div>`;
+  $('#modal-root').innerHTML=`<div class="overlay library-overlay" data-action="library-close"><section class="gallery-detail-modal" role="dialog" aria-modal="true" aria-labelledby="gallery-detail-title"><div class="gallery-detail-head"><div><h2 id="gallery-detail-title">${escapeHtml(a.name)}</h2><span class="gallery-detail-en">${escapeHtml(a.en)}</span></div>${ebutton('library-close','close','상세 닫기')}</div><div class="gallery-detail-stage"><canvas id="gallery-detail-canvas" role="img" aria-label="${escapeHtml(a.name)} 정렬 미리보기"></canvas></div>${a.category==='패러디'?'<div class="experiment-warning">패러디·실험 — 일반 도감과 분리된 실험 항목입니다.</div>':''}<div class="gallery-detail-explain">${escapeHtml(desc.summary)}<span>${escapeHtml(desc.detail)}</span></div><div class="gallery-detail-controls">${ebutton('library-detail-reset','reset','다시 정렬')}${ebutton('library-detail-play','pause','일시정지','icon-btn gallery-detail-play','id="gallery-detail-play"')}${ebutton('library-detail-step','step-forward','한 단계 진행')}${ebutton('library-detail-new','shuffle','새 배열')}</div><div class="gallery-detail-facts"><div><span>평균</span><strong>${escapeHtml(a.avg)}</strong></div><div><span>공간</span><strong>${escapeHtml(a.space)}</strong></div><div><span>유형</span><strong>${escapeHtml(a.category==='패러디'?'패러디·실험':a.category)}</strong></div><div><span>${a.category==='패러디'?'결과':'안정성'}</span><strong>${a.category==='패러디'?resultType:a.stable?'안정':'비안정'}</strong></div></div>${a.category==='패러디'?'':`<button type="button" class="gallery-open" data-action="library-open">시각화로 이동 ${icon('arrow',16)}</button>`}</section></div>`;
   libraryDetail.view=new BarView($('#gallery-detail-canvas'));
   $('#modal-root [data-action="library-close"]:not(.overlay)')?.focus();
 }
@@ -157,10 +161,10 @@ function closePicker() { state.picker = false; $('#modal-root').innerHTML = ''; 
 function renderPickerItems() {
   const tabs = $('#picker-tabs'), items = $('#picker-items'); if (!tabs || !items) return;
   tabs.innerHTML = categories.map(category=>`<button class="tab-chip ${state.pickerCategory===category?'active':''}" data-action="picker-category" data-value="${category}">${category}</button>`).join('');
-  const filtered = algorithms.filter(a=>(state.pickerCategory==='전체'||a.category===state.pickerCategory)&&`${a.name} ${a.en}`.toLowerCase().includes(state.pickerQuery.toLowerCase().trim()));
+  const filtered = standardAlgorithms.filter(a=>(state.pickerCategory==='전체'||a.category===state.pickerCategory)&&`${a.name} ${a.en}`.toLowerCase().includes(state.pickerQuery.toLowerCase().trim()));
   items.innerHTML = filtered.length ? filtered.map(a=>`<button class="picker-item" data-action="picker-select" data-id="${a.id}"><span>${escapeHtml(a.name)}</span><small>${escapeHtml(a.avg)}</small></button>`).join('') : '<div class="empty-text">결과가 없습니다.</div>';
 }
-function navigation(page) { if (!['home','visual','compare','library'].includes(page)) return; state.page = page; if (!sidebarMedia.matches) { state.sidebar = false; $('#layout').classList.remove('expanded'); } renderPage(); }
+function navigation(page) { if (!['home','visual','compare','library','experiment'].includes(page)) return; state.page = page; if (!sidebarMedia.matches) { state.sidebar = false; $('#layout').classList.remove('expanded'); } renderPage(); }
 function resetCurrent(changeArray = false) {
   state.playing = false;
   opAccumulator = 0;
@@ -197,7 +201,7 @@ function actionHandler(event) {
   if (action==='picker-main') return openPicker('main');
   if (action==='picker-compare') return openPicker(Number(button.dataset.index));
   if (action==='picker-category') { state.pickerCategory=value; renderPickerItems(); return; }
-  if (action==='picker-select') { const id = button.dataset.id; if (state.pickerTarget==='main') { state.algo=id; persist(); closePicker(); renderPage(); } else { state.compareIds[state.pickerTarget]=id; closePicker(); renderPage(); } return; }
+  if (action==='picker-select') { const id = button.dataset.id; if(!algorithmById[id] || isExperimentalSort(algorithmById[id]))return; if (state.pickerTarget==='main') { state.algo=id; persist(); closePicker(); renderPage(); } else { state.compareIds[state.pickerTarget]=id; closePicker(); renderPage(); } return; }
   if (action==='close-picker') return closePicker();
   if (action==='play') return togglePlay();
   if (action==='step-forward' || action==='step-back') {
@@ -218,7 +222,7 @@ function actionHandler(event) {
   if (action==='compare-sound') { state.compareSoundIndex=Number(button.dataset.index); document.querySelectorAll('[data-action="compare-sound"]').forEach(el=>{ const selected=Number(el.dataset.index)===state.compareSoundIndex; el.classList.toggle('selected',selected); el.innerHTML=icon(selected?'sound':'dots'); }); return; }
   if (action==='library-select') return openLibraryDetail(button.dataset.id);
   if (action==='library-close') { if(button.classList.contains('overlay')&&event.target!==button)return; return closeLibraryDetail(); }
-  if (action==='library-open') { state.algo=state.librarySelected; persist(); navigation('visual'); return; }
+  if (action==='library-open') { if(!algorithmById[state.librarySelected] || isExperimentalSort(algorithmById[state.librarySelected]))return; state.algo=state.librarySelected; persist(); navigation('visual'); return; }
   if (action==='library-settings' || action==='library-filter') {const panel=action==='library-settings'?'speed':'filter';state.libraryPanel=state.libraryPanel===panel?'':panel;renderLibraryPanel();return;}
   if (action==='library-speed-select') { state.librarySpeed=Number(value);state.libraryPanel='';persist();renderLibraryPanel();return;}
   if (action==='library-category') {state.libraryCategory=value;state.libraryPanel='';renderLibraryPanel();renderLibraryGallery();return;}
@@ -232,14 +236,14 @@ function actionHandler(event) {
 document.addEventListener('click',actionHandler);
 document.addEventListener('input', (event)=>{
   if (event.target.id==='picker-query') { state.pickerQuery=event.target.value; renderPickerItems(); }
-  if (event.target.id==='library-query') { state.libraryQuery=event.target.value; renderLibraryGallery(); }
+  if (event.target.id==='library-query') { if(state.page==='experiment')state.experimentQuery=event.target.value;else state.libraryQuery=event.target.value; renderLibraryGallery(); }
   const key=event.target.dataset.setting;
   if (key==='speed') { state.speed=Number(event.target.value); const label=$('#speed-label'); if(label) label.textContent=state.speed+'×'; persist(); }
   if (key==='count') { state.count=Number(event.target.value); const label=$('#count-label'); if(label) label.textContent=state.count; persist(); resetCurrent(true); }
   if (key==='volume') { state.volume=Number(event.target.value); sound.volume=state.volume/100; const label=$('#volume-label'); if(label) label.textContent=state.volume+'%'; persist(); }
 });
 document.addEventListener('keydown',(event)=>{
-  if (event.key==='Escape') { if (libraryDetail) closeLibraryDetail(); else if(state.page==='library'&&state.libraryPanel){state.libraryPanel='';renderLibraryPanel();}else if (state.picker) closePicker(); else if(state.settings){state.settings=false;renderSettings();updateStats();}else if(state.focus){state.focus=false;app.classList.remove('focus','reveal');} else if(state.sidebar){state.sidebar=false;$('#layout').classList.remove('expanded');} return; }
+  if (event.key==='Escape') { if (libraryDetail) closeLibraryDetail(); else if(['library','experiment'].includes(state.page)&&state.libraryPanel){state.libraryPanel='';renderLibraryPanel();}else if (state.picker) closePicker(); else if(state.settings){state.settings=false;renderSettings();updateStats();}else if(state.focus){state.focus=false;app.classList.remove('focus','reveal');} else if(state.sidebar){state.sidebar=false;$('#layout').classList.remove('expanded');} return; }
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
   if (event.target.closest('button')) { if (event.key==='Enter') return; }
   if (state.picker) return;
@@ -281,7 +285,7 @@ function renderFrame(now) {
       else m.engine.run(36,2);
       m.view.draw(m.engine.values,{highlight:m.engine.highlight,completed:m.engine.completed,finishedAt:m.engine.finishedAt,now,altered:!!m.engine.algorithm.altersInput});
     });
-    if(state.page==='library')updateLibraryFrames(dt,now);
+    if(state.page==='library'||state.page==='experiment')updateLibraryFrames(dt,now);
   }
   requestAnimationFrame(renderFrame);
 }
