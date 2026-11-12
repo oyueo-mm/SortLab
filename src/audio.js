@@ -1,37 +1,9 @@
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
-
 export class SortAudio {
-  constructor() { this.context = null; this.enabled = true; this.volume = 0.3; this.style = 'retro'; this.lastNote = 0; this.nextScheduled = 0; }
-  unlock() { if (!this.enabled) return; try { if (!this.context) this.context = new (window.AudioContext || window.webkitAudioContext)(); if (this.context.state === 'suspended') this.context.resume(); } catch { this.enabled = false; } }
+  constructor() { this.context = null; this.enabled = true; this.volume = 0.7; this.style = 'retro'; this.lastNote = -Infinity; this.master = null; this.limiter = null; }
+  unlock() { if (!this.enabled) return; try { if (!this.context) { const AudioContext = window.AudioContext || window.webkitAudioContext; this.context = new AudioContext(); const ctx = this.context; this.master = ctx.createGain(); this.master.gain.value = 1; if (ctx.createDynamicsCompressor) { this.limiter = ctx.createDynamicsCompressor(); this.limiter.threshold.value = -18; this.limiter.knee.value = 12; this.limiter.ratio.value = 12; this.limiter.attack.value = 0.003; this.limiter.release.value = 0.09; this.master.connect(this.limiter); this.limiter.connect(ctx.destination); } else { this.master.connect(ctx.destination); } } if (this.context.state === 'suspended') this.context.resume(); } catch { this.enabled = false; } }
   setEnabled(enabled) { this.enabled = enabled; if (enabled) this.unlock(); }
-  note(value, maxValue = 100, kind = 's', delay = 0) {
-    if (!this.enabled || !this.context || this.context.state !== 'running' || document.hidden) return;
-    const ctx = this.context;
-    const t = Math.max(ctx.currentTime, ctx.currentTime + delay);
-    const ratio = clamp(value / Math.max(1, maxValue), 0, 1);
-    const freq = 180 * Math.pow(2, ratio * 2.7);
-    const osc = ctx.createOscillator(), gain = ctx.createGain();
-    osc.type = this.style === 'soft' ? 'sine' : this.style === 'click' ? 'square' : this.style === 'synth' ? 'sawtooth' : 'triangle';
-    osc.frequency.setValueAtTime(freq, t);
-    const duration = this.style === 'soft' ? 0.10 : this.style === 'synth' ? 0.07 : 0.043;
-    const peak = (this.style === 'click' ? 0.009 : 0.018) * this.volume * (kind === 'c' ? 0.68 : 1);
-    gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + 0.004);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.start(t); osc.stop(t + duration + 0.006);
-    osc.onended = () => { osc.disconnect(); gain.disconnect(); };
-  }
-  consume(events, maxValue = 100) {
-    if (!events.length || !this.context) return;
-    const now = this.context.currentTime;
-    if (now < this.lastNote + 0.029) return;
-    this.lastNote = now;
-    const choices = events.length > 2 ? [events[0], events[events.length - 1]] : events;
-    choices.forEach((e, i) => this.note(e.value, maxValue, e.op.t, i * 0.017));
-  }
-  complete() {
-    if (!this.context || !this.enabled || document.hidden) return;
-    for (let i = 0; i < 16; i++) this.note(i + 1, 16, 's', i * 0.036);
-  }
+  note(value, maxValue = 100, kind = 's', delay = 0) { if (!this.enabled || !this.context || this.context.state !== 'running' || document.hidden) return; const volume = clamp(Number(this.volume) || 0, 0, 1); if (volume === 0) return; const ctx = this.context; const t = ctx.currentTime + Math.max(0, delay); const ratio = clamp(value / Math.max(1, maxValue), 0, 1); const freq = 180 * Math.pow(2, ratio * 2.7); const osc = ctx.createOscillator(), gain = ctx.createGain(); osc.type = this.style === 'soft' ? 'sine' : this.style === 'click' ? 'square' : this.style === 'synth' ? 'sawtooth' : 'triangle'; osc.frequency.setValueAtTime(freq, t); const duration = this.style === 'soft' ? 0.14 : this.style === 'synth' ? 0.09 : this.style === 'click' ? 0.043 : 0.068; const basePeak = this.style === 'click' ? 0.075 : this.style === 'soft' ? 0.15 : this.style === 'synth' ? 0.115 : 0.13; const peak = basePeak * Math.pow(volume, 0.8) * (kind === 'c' ? 0.78 : 1); gain.gain.setValueAtTime(0.0001, t); gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + 0.004); gain.gain.exponentialRampToValueAtTime(0.0001, t + duration); osc.connect(gain); gain.connect(this.master); osc.start(t); osc.stop(t + duration + 0.008); osc.onended = () => { osc.disconnect(); gain.disconnect(); }; }
+  consume(events, maxValue = 100) { if (!events.length || !this.context) return; const now = this.context.currentTime; if (now < this.lastNote + 0.029) return; this.lastNote = now; const choices = events.length > 2 ? [events[0], events[events.length - 1]] : events; choices.forEach((e, i) => this.note(e.value, maxValue, e.op.t, i * 0.017)); }
+  complete() { if (!this.context || !this.enabled || document.hidden) return; for (let i = 0; i < 16; i++) this.note(i + 1, 16, 's', i * 0.036); }
 }

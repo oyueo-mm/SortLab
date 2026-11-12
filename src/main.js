@@ -10,7 +10,7 @@ import { LIBRARY_DEFAULT_SPEED, LIBRARY_SPEEDS, LIBRARY_COMPLETE_HOLD_MS, librar
 const $ = (selector, root = document) => root.querySelector(selector);
 const app = $('#app');
 const sidebarMedia = window.matchMedia('(min-width: 621px)');
-const initial = { page: 'home', algo: 'quickHoare', pattern: 'random', count: 100, speed: 82, style: 'bars', soundOn: true, volume: 30, soundStyle: 'retro', sidebar: sidebarMedia.matches };
+const initial = { page: 'home', algo: 'quickHoare', pattern: 'random', count: 100, speed: 82, style: 'bars', soundOn: true, volume: 70, soundStyle: 'retro', sidebar: sidebarMedia.matches };
 let cached = {};
 try { cached = JSON.parse(localStorage.getItem('sortlab:prefs') || '{}') || {}; } catch { /* private browsing */ }
 const state = { ...initial, ...cached, page: 'home', sidebar: sidebarMedia.matches, settings: false, picker: false, pickerCategory: '전체', pickerQuery: '', pickerTarget: 'main', librarySelected: 'quickHoare', libraryQuery: '', experimentQuery: '', libraryCategory: '전체', librarySpeed: LIBRARY_SPEEDS.includes(Number(cached.librarySpeed)) ? Number(cached.librarySpeed) : LIBRARY_DEFAULT_SPEED, libraryPanel: '', compareIds: ['bubble', 'quickHoare', 'merge', 'heap'], compareSoundIndex: 1, playing: false, focus: false };
