@@ -1,0 +1,13 @@
+import { test } from 'node:test';
+import { strict as assert } from 'node:assert';
+import { algorithms } from '../src/algorithms.js';
+import { generateData } from '../src/data.js';
+import { SortEngine } from '../src/engine.js';
+import { LIBRARY_SPEEDS, LIBRARY_COMPLETE_HOLD_MS, LIBRARY_BASE_EVENTS_PER_SECOND, libraryInputSize, libraryEventsPerSecond, filterLibraryAlgorithms, advanceLibraryCard } from '../src/library.js';
+
+test('gallery offers all 30 algorithms without duplicates', () => { assert.equal(algorithms.length,30);assert.equal(new Set(algorithms.map(a=>a.id)).size,30);assert.equal(filterLibraryAlgorithms(algorithms).length,30); });
+test('gallery supports Korean and English query and category search together', () => { assert.equal(filterLibraryAlgorithms(algorithms,'bubble')[0].id,'bubble');assert.equal(filterLibraryAlgorithms(algorithms,'버블')[0].id,'bubble');assert.ok(filterLibraryAlgorithms(algorithms,'정렬','기초').every(a=>a.category==='기초'));assert.deepEqual(filterLibraryAlgorithms(algorithms,'검색결과없음'),[]); });
+test('gallery speed is capped at 2x, default is 24 events per second', () => { assert.deepEqual(LIBRARY_SPEEDS,[.25,.5,1,2]);assert.equal(LIBRARY_BASE_EVENTS_PER_SECOND,24);assert.deepEqual(LIBRARY_SPEEDS.map(libraryEventsPerSecond),[6,12,24,48]);assert.equal(libraryEventsPerSecond(100),24);assert.equal(LIBRARY_COMPLETE_HOLD_MS,2000); });
+test('gallery input respects special algorithm constraints', () => { assert.equal(libraryInputSize(algorithms.find(a=>a.id==='bogo')),4);assert.equal(libraryInputSize(algorithms.find(a=>a.id==='stooge')),12);assert.equal(libraryInputSize(algorithms.find(a=>a.id==='bitonic')),16);assert.equal(libraryInputSize(algorithms.find(a=>a.id==='quickHoare')),24); });
+test('gallery preview progresses gradually and pauses without a time update', () => { const e=new SortEngine('bubble',generateData(24,'descending'));let fraction=0;for(let i=0;i<60;i++)fraction=advanceLibraryCard(e,fraction,1/60,1);assert.ok(e.operations>=23&&e.operations<=25,`operations=${e.operations}`);const frozen=e.position;for(let i=0;i<60;i++)fraction=advanceLibraryCard(e,fraction,0,1);assert.equal(e.position,frozen); });
+test('each gallery preview can finish correctly with selected input size', () => { for(const a of algorithms){const e=new SortEngine(a.id,generateData(libraryInputSize(a),'random',0.736));let budget=300000;while(!e.completed&&budget-- >0)e.stepForward();assert.ok(e.completed&&!e.failed,`failed ${a.id}`);assert.deepEqual(e.values,[...e.initial].sort((x,y)=>x-y),`unsorted ${a.id}`); } });

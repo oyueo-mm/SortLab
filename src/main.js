@@ -4,23 +4,24 @@ import { SortEngine, speedToEventsPerSecond } from './engine.js';
 import { BarView } from './visual.js';
 import { SortAudio } from './audio.js';
 import { icon } from './icons.js';
+import { LIBRARY_DEFAULT_SPEED, LIBRARY_SPEEDS, LIBRARY_COMPLETE_HOLD_MS, libraryInputSize, libraryEventsPerSecond, filterLibraryAlgorithms, advanceLibraryCard } from './library.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const app = $('#app');
 const initial = { page: 'home', algo: 'quickHoare', pattern: 'random', count: 100, speed: 82, style: 'bars', soundOn: true, volume: 30, soundStyle: 'retro', sidebar: false };
 let cached = {};
 try { cached = JSON.parse(localStorage.getItem('sortlab:prefs') || '{}') || {}; } catch { /* private browsing */ }
-const state = { ...initial, ...cached, page: 'home', sidebar: false, settings: false, picker: false, pickerCategory: '전체', pickerQuery: '', pickerTarget: 'main', librarySelected: 'quickHoare', libraryQuery: '', compareIds: ['bubble', 'quickHoare', 'merge', 'heap'], compareSoundIndex: 1, playing: false, focus: false };
+const state = { ...initial, ...cached, page: 'home', sidebar: false, settings: false, picker: false, pickerCategory: '전체', pickerQuery: '', pickerTarget: 'main', librarySelected: 'quickHoare', libraryQuery: '', libraryCategory: '전체', librarySpeed: LIBRARY_SPEEDS.includes(Number(cached.librarySpeed)) ? Number(cached.librarySpeed) : LIBRARY_DEFAULT_SPEED, libraryPanel: '', compareIds: ['bubble', 'quickHoare', 'merge', 'heap'], compareSoundIndex: 1, playing: false, focus: false };
 const sound = new SortAudio();
 sound.enabled = state.soundOn;
 sound.volume = state.volume / 100;
 sound.style = state.soundStyle;
-let engine = null, engineView = null, compareEngines = [], compareViews = [], miniEngines = [], libraryEngine = null, libraryView = null;
+let engine = null, engineView = null, compareEngines = [], compareViews = [], miniEngines = [], libraryCards = [], libraryObserver = null, libraryDetail = null, libraryDetailFocus = null;
 let lastFrame = 0, opAccumulator = 0, toastTimeout = null, focusTimeout = null;
 const categories = ['전체', '기초', '고급', '분포', '하이브리드', '특수'];
 const sortedDemoIds = ['bubble', 'insertion', 'quickHoare', 'merge', 'heap', 'shell', 'cocktail', 'radixLsd', 'selection', 'timsort', 'pancake', 'comb'];
 
-function persist() { const { algo, pattern, count, speed, style, soundOn, volume, soundStyle } = state; try { localStorage.setItem('sortlab:prefs', JSON.stringify({ algo, pattern, count, speed, style, soundOn, volume, soundStyle })); } catch { /* privacy mode */ } }
+function persist() { const { algo, pattern, count, speed, style, soundOn, volume, soundStyle, librarySpeed } = state; try { localStorage.setItem('sortlab:prefs', JSON.stringify({ algo, pattern, count, speed, style, soundOn, volume, soundStyle, librarySpeed })); } catch { /* privacy mode */ } }
 function ebutton(action, symbol, label, css = 'icon-btn', extra = '') { return `<button type="button" class="${css}" data-action="${action}" aria-label="${label}" title="${label}" ${extra}>${icon(symbol)}</button>`; }
 function formatCount(n) { return n.toLocaleString('ko-KR'); }
 function shortName(id) { return algorithmById[id]?.en.split(' · ')[0] || id; }
@@ -49,7 +50,8 @@ function renderPage() {
   state.focus = false;
   app.classList.remove('focus','reveal');
   opAccumulator = 0;
-  engine = null; engineView = null; compareEngines = []; compareViews = []; miniEngines = []; libraryEngine = null; libraryView = null;
+  if (libraryObserver) libraryObserver.disconnect(); libraryObserver = null; libraryCards = []; libraryDetail = null; state.libraryPanel = ''; state.picker = false; $('#modal-root')?.replaceChildren();
+  engine = null; engineView = null; compareEngines = []; compareViews = []; miniEngines = [];
   const el = $('#screen');
   if (!el) return;
   if (state.page === 'home') {
@@ -70,8 +72,8 @@ function renderPage() {
     compareViews = compareEngines.map((_,i)=>new BarView($('#compare-'+i),{compact:true}));
     showCompareLimits(data);
   } else if (state.page === 'library') {
-    el.innerHTML = `<section class="screen library-screen"><div class="library-header"><h1 class="compact-heading">도감</h1><span class="screen-pill">${algorithms.length}</span></div><div class="library-layout"><div class="library-list"><label class="library-search">${icon('search',15)}<input id="library-query" type="search" placeholder="알고리즘 검색" aria-label="알고리즘 검색" autocomplete="off" value="${escapeHtml(state.libraryQuery)}" /></label><div id="library-items"></div></div><div class="library-detail" id="library-detail"></div></div></section>`;
-    renderLibraryList(); renderLibraryDetail();
+    el.innerHTML = `<section class="screen library-screen gallery-screen"><div class="gallery-toolbar"><label class="gallery-search">${icon('search',16)}<input id="library-query" type="search" placeholder="검색" aria-label="알고리즘 검색" autocomplete="off" value="${escapeHtml(state.libraryQuery)}" /></label><span id="gallery-count" class="gallery-count" aria-live="polite">${algorithms.length}</span>${ebutton('library-filter','filter','정렬 종류 필터','icon-btn gallery-tool')}${ebutton('library-settings','settings','미리보기 속도','icon-btn gallery-tool')}</div><div id="gallery-panel" class="gallery-panel" hidden></div><div class="gallery-grid" id="library-items"></div></section>`;
+    renderLibraryGallery();
   }
   document.querySelectorAll('.rail-btn.nav[data-page]').forEach(btn => { btn.classList.toggle('active',btn.dataset.page===state.page); btn.toggleAttribute('aria-current',btn.dataset.page===state.page); });
   setPlayIcon(); updateSoundIcon();
@@ -90,17 +92,44 @@ function handleCanvasHover(evt) {
   readout.style.top = `${evt.clientY - rect.top}px`;
   readout.classList.add('visible');
 }
-function renderLibraryList() {
+function libraryCardMarkup(a) { return `<button type="button" class="gallery-card" data-action="library-select" data-id="${a.id}" aria-label="${escapeHtml(a.name)} 자세히 보기" title="${escapeHtml(a.name)}"><span class="gallery-card-name">${escapeHtml(shortName(a.id))}</span><span class="gallery-canvas"><canvas id="gallery-${a.id}" aria-hidden="true"></canvas></span><span class="gallery-card-bottom"><span class="gallery-status" aria-hidden="true"></span></span></button>`; }
+function renderLibraryGallery() {
   const root = $('#library-items'); if (!root) return;
-  const query = state.libraryQuery.toLowerCase().trim();
-  const items = algorithms.filter(a => `${a.name} ${a.en} ${a.category}`.toLowerCase().includes(query));
-  root.innerHTML = items.length ? items.map(a => `<button class="library-row ${a.id===state.librarySelected?'active':''}" data-action="library-select" data-id="${a.id}"><span>${escapeHtml(a.name)}</span><small>${a.category}</small></button>`).join('') : `<div class="library-no-results">검색 결과가 없습니다.</div>`;
+  if (libraryObserver) libraryObserver.disconnect(); libraryObserver = null;
+  const items = filterLibraryAlgorithms(algorithms, state.libraryQuery, state.libraryCategory);
+  const count = $('#gallery-count'); if (count) count.textContent = items.length;
+  root.innerHTML = items.length ? items.map(libraryCardMarkup).join('') : `<div class="gallery-empty">검색 결과가 없습니다.</div>`;
+  const start = performance.now();
+  libraryCards = items.map((a,i) => { const node = root.querySelector(`[data-id="${a.id}"]`), canvas = node.querySelector('canvas'); return { id:a.id, node, engine:new SortEngine(a.id, generateData(libraryInputSize(a), 'random')), view:new BarView(canvas,{compact:true}), visible:false, accumulator:0, nextStart:start+(i%7)*110, lastDraw:0 }; });
+  if ('IntersectionObserver' in window) { libraryObserver = new IntersectionObserver((entries) => { for (const entry of entries) { const card = libraryCards.find(c=>c.node===entry.target); if(card) card.visible=entry.isIntersecting; } }, {root:$('#workspace'),rootMargin:'60px 0px 60px 0px',threshold:0}); libraryCards.forEach(c=>libraryObserver.observe(c.node)); }
+  else libraryCards.forEach(c=>{c.visible=true;});
 }
-function renderLibraryDetail() {
-  const a = algorithmById[state.librarySelected] || algorithms[0], root = $('#library-detail'); if (!root) return;
-  root.innerHTML = `<div><h2>${escapeHtml(a.name)}</h2><div class="en">${escapeHtml(a.en)}</div></div><canvas id="library-preview" aria-label="${a.name} 시각화"></canvas><div class="library-tags"><span>${a.category}</span><span>평균 ${escapeHtml(a.avg)}</span><span>공간 ${escapeHtml(a.space)}</span><span>${a.stable?'안정 정렬':'비안정 정렬'}</span>${a.maxSize?`<span>최대 ${a.maxSize}개</span>`:''}${a.powerOfTwo?'<span>2의 거듭제곱 개수</span>':''}</div><div class="detail-bottom"><button class="action-small" data-action="library-open">실행 ${icon('arrow',15)}</button>${ebutton('library-reset','reset','미리보기 다시 보기')}</div>`;
-  libraryEngine = new SortEngine(a.id, generateData(42,'random'));
-  libraryView = new BarView($('#library-preview'));
+function renderLibraryPanel() {
+  const el=$('#gallery-panel'); if(!el)return;
+  el.hidden=!state.libraryPanel;
+  if(state.libraryPanel==='speed')el.innerHTML=`<div class="gallery-panel-title">속도</div><div class="gallery-options">${LIBRARY_SPEEDS.map(n=>`<button type="button" class="gallery-option ${n===state.librarySpeed?'active':''}" data-action="library-speed-select" data-value="${n}" aria-pressed="${n===state.librarySpeed}">${n}×</button>`).join('')}</div>`;
+  if(state.libraryPanel==='filter')el.innerHTML=`<div class="gallery-panel-title">분류</div><div class="gallery-options">${categories.map(c=>`<button type="button" class="gallery-option ${c===state.libraryCategory?'active':''}" data-action="library-category" data-value="${c}" aria-pressed="${c===state.libraryCategory}">${c}</button>`).join('')}</div>`;
+}
+function openLibraryDetail(id) {
+  const a=algorithmById[id]; if(!a || state.page!=='library')return;
+  libraryDetailFocus=document.activeElement; state.librarySelected=id;
+  const current=libraryCards.find(c=>c.id===id); const seed=current ? current.engine.initial : generateData(libraryInputSize(a),'random');
+  libraryDetail={id,engine:new SortEngine(id,seed),view:null,playing:true,accumulator:0,lastDraw:0};
+  $('#modal-root').innerHTML=`<div class="overlay library-overlay" data-action="library-close"><section class="gallery-detail-modal" role="dialog" aria-modal="true" aria-labelledby="gallery-detail-title"><div class="gallery-detail-head"><div><h2 id="gallery-detail-title">${escapeHtml(a.name)}</h2><span class="gallery-detail-en">${escapeHtml(a.en)}</span></div>${ebutton('library-close','close','상세 닫기')}</div><div class="gallery-detail-stage"><canvas id="gallery-detail-canvas" role="img" aria-label="${escapeHtml(a.name)} 정렬 미리보기"></canvas></div><div class="gallery-detail-controls">${ebutton('library-detail-reset','reset','다시 정렬')}${ebutton('library-detail-play','pause','일시정지','icon-btn gallery-detail-play','id="gallery-detail-play"')}${ebutton('library-detail-step','step-forward','한 단계 진행')}${ebutton('library-detail-new','shuffle','새 배열')}</div><div class="gallery-detail-facts"><div><span>평균</span><strong>${escapeHtml(a.avg)}</strong></div><div><span>공간</span><strong>${escapeHtml(a.space)}</strong></div><div><span>유형</span><strong>${escapeHtml(a.category)}</strong></div><div><span>안정성</span><strong>${a.stable?'안정':'비안정'}</strong></div></div><button type="button" class="gallery-open" data-action="library-open">시각화로 이동 ${icon('arrow',16)}</button></section></div>`;
+  libraryDetail.view=new BarView($('#gallery-detail-canvas'));
+  $('#modal-root [data-action="library-close"]:not(.overlay)')?.focus();
+}
+function closeLibraryDetail() { if(!libraryDetail)return; libraryDetail=null; $('#modal-root').replaceChildren(); if(libraryDetailFocus?.isConnected)libraryDetailFocus.focus(); libraryDetailFocus=null; }
+function updateLibraryDetailPlay() { const btn=$('#gallery-detail-play'); if(btn&&libraryDetail){btn.innerHTML=icon(libraryDetail.playing?'pause':'play');btn.title=libraryDetail.playing?'일시정지':'재생';btn.setAttribute('aria-label',btn.title);} }
+function resetLibraryDetail(fresh=false) { if(!libraryDetail)return; const a=algorithmById[libraryDetail.id]; const seed=fresh ? generateData(libraryInputSize(a),'random') : libraryDetail.engine.initial; libraryDetail.engine=new SortEngine(a.id,seed);libraryDetail.accumulator=0;libraryDetail.playing=true;updateLibraryDetailPlay(); }
+function updateLibraryFrames(dt,now) {
+  if (!libraryDetail) for(const card of libraryCards){
+    if(!card.visible||now<card.nextStart)continue;
+    if(card.engine.completed && now-card.engine.finishedAt>LIBRARY_COMPLETE_HOLD_MS){card.engine=new SortEngine(card.id,generateData(libraryInputSize(algorithmById[card.id]),'random'));card.accumulator=0;card.lastDraw=0;}
+    else if(!card.engine.completed)card.accumulator=advanceLibraryCard(card.engine,card.accumulator,dt,state.librarySpeed);
+    if(now-card.lastDraw>=33 || !card.lastDraw){card.view.draw(card.engine.values,{highlight:card.engine.highlight,completed:card.engine.completed&&!card.engine.failed,finishedAt:card.engine.finishedAt,now});card.lastDraw=now;card.node.classList.toggle('sorted',card.engine.completed&&!card.engine.failed);card.node.classList.toggle('failed',card.engine.failed);}
+  }
+  if(libraryDetail){const d=libraryDetail;if(d.playing){if(d.engine.completed){d.playing=false;updateLibraryDetailPlay();}else{d.accumulator=advanceLibraryCard(d.engine,d.accumulator,dt,state.librarySpeed);if(d.engine.completed){d.playing=false;updateLibraryDetailPlay();}}}if(now-d.lastDraw>=20||!d.lastDraw){d.view.draw(d.engine.values,{highlight:d.engine.highlight,completed:d.engine.completed&&!d.engine.failed,finishedAt:d.engine.finishedAt,now});d.lastDraw=now;}}
 }
 function renderSettings() {
   const host = $('#settings-host'); if (!host) return;
@@ -183,25 +212,32 @@ function actionHandler(event) {
   if (action==='style') { state.style=value; if(engineView) engineView.style=value; persist(); renderSettings(); return; }
   if (action==='sound-style') { state.soundStyle=value; sound.style=value; persist(); renderSettings(); return; }
   if (action==='focus') { if (state.page!=='visual') return; state.focus=!state.focus; app.classList.toggle('focus',state.focus); app.classList.toggle('reveal',state.focus); if (state.focus) revealFocus(); else app.classList.remove('reveal'); return; }
-  if (action==='details') { const a=algorithmById[state.algo]; state.playing=false; setPlayIcon(); state.librarySelected=a.id; navigation('library'); return; }
+  if (action==='details') { const a=algorithmById[state.algo]; state.playing=false; setPlayIcon(); navigation('library'); openLibraryDetail(a.id); return; }
   if (action==='compare-sound') { state.compareSoundIndex=Number(button.dataset.index); document.querySelectorAll('[data-action="compare-sound"]').forEach(el=>{ const selected=Number(el.dataset.index)===state.compareSoundIndex; el.classList.toggle('selected',selected); el.innerHTML=icon(selected?'sound':'dots'); }); return; }
-  if (action==='library-select') { state.librarySelected=button.dataset.id; renderLibraryList(); renderLibraryDetail(); return; }
+  if (action==='library-select') return openLibraryDetail(button.dataset.id);
+  if (action==='library-close') { if(button.classList.contains('overlay')&&event.target!==button)return; return closeLibraryDetail(); }
   if (action==='library-open') { state.algo=state.librarySelected; persist(); navigation('visual'); return; }
-  if (action==='library-reset') return renderLibraryDetail();
+  if (action==='library-settings' || action==='library-filter') {const panel=action==='library-settings'?'speed':'filter';state.libraryPanel=state.libraryPanel===panel?'':panel;renderLibraryPanel();return;}
+  if (action==='library-speed-select') { state.librarySpeed=Number(value);state.libraryPanel='';persist();renderLibraryPanel();return;}
+  if (action==='library-category') {state.libraryCategory=value;state.libraryPanel='';renderLibraryPanel();renderLibraryGallery();return;}
+  if (action==='library-detail-play') {if(!libraryDetail)return;if(libraryDetail.engine.completed)resetLibraryDetail();else libraryDetail.playing=!libraryDetail.playing;updateLibraryDetailPlay();return;}
+  if (action==='library-detail-reset')return resetLibraryDetail(false);
+  if (action==='library-detail-new')return resetLibraryDetail(true);
+  if (action==='library-detail-step'){if(!libraryDetail)return;libraryDetail.playing=false;libraryDetail.engine.stepForward();updateLibraryDetailPlay();return;}
   if (action==='mini') { const i=Number(button.dataset.index); state.algo=miniEngines[i]?.id || 'quickHoare'; persist(); navigation('visual'); }
 }
 
 document.addEventListener('click',actionHandler);
 document.addEventListener('input', (event)=>{
   if (event.target.id==='picker-query') { state.pickerQuery=event.target.value; renderPickerItems(); }
-  if (event.target.id==='library-query') { state.libraryQuery=event.target.value; renderLibraryList(); }
+  if (event.target.id==='library-query') { state.libraryQuery=event.target.value; renderLibraryGallery(); }
   const key=event.target.dataset.setting;
   if (key==='speed') { state.speed=Number(event.target.value); const label=$('#speed-label'); if(label) label.textContent=state.speed+'×'; persist(); }
   if (key==='count') { state.count=Number(event.target.value); const label=$('#count-label'); if(label) label.textContent=state.count; persist(); resetCurrent(true); }
   if (key==='volume') { state.volume=Number(event.target.value); sound.volume=state.volume/100; const label=$('#volume-label'); if(label) label.textContent=state.volume+'%'; persist(); }
 });
 document.addEventListener('keydown',(event)=>{
-  if (event.key==='Escape') { if (state.picker) closePicker(); else if(state.settings){state.settings=false;renderSettings();updateStats();}else if(state.focus){state.focus=false;app.classList.remove('focus','reveal');} else if(state.sidebar){state.sidebar=false;$('#layout').classList.remove('expanded');} return; }
+  if (event.key==='Escape') { if (libraryDetail) closeLibraryDetail(); else if(state.page==='library'&&state.libraryPanel){state.libraryPanel='';renderLibraryPanel();}else if (state.picker) closePicker(); else if(state.settings){state.settings=false;renderSettings();updateStats();}else if(state.focus){state.focus=false;app.classList.remove('focus','reveal');} else if(state.sidebar){state.sidebar=false;$('#layout').classList.remove('expanded');} return; }
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
   if (event.target.closest('button')) { if (event.key==='Enter') return; }
   if (state.picker) return;
@@ -243,7 +279,7 @@ function renderFrame(now) {
       else m.engine.run(36,2);
       m.view.draw(m.engine.values,{highlight:m.engine.highlight,completed:m.engine.completed,finishedAt:m.engine.finishedAt,now});
     });
-    if(state.page==='library'&&libraryEngine){if(!libraryEngine.completed)libraryEngine.run(50,2);else if(now-libraryEngine.finishedAt>1300)libraryEngine=new SortEngine(state.librarySelected,generateData(42,'random'));libraryView.draw(libraryEngine.values,{highlight:libraryEngine.highlight,completed:libraryEngine.completed,finishedAt:libraryEngine.finishedAt,now});}
+    if(state.page==='library')updateLibraryFrames(dt,now);
   }
   requestAnimationFrame(renderFrame);
 }
