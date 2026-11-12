@@ -38,6 +38,7 @@ function renderShell() {
 }
 
 function newSource() { return generateData(state.count, state.pattern); }
+function commonCompareData(input) { let n = input.length; for (const id of state.compareIds) { const algo = algorithmById[id]; if (algo.maxSize) n = Math.min(n, algo.maxSize); } if (state.compareIds.some(id => algorithmById[id].powerOfTwo)) n = 2 ** Math.floor(Math.log2(n)); return input.slice(0, Math.max(2,n)); }
 function meter() { return '<div class="meter" id="meter" role="progressbar" aria-label="정렬 진행 상태"></div>'; }
 function controls(compact = false) { return `<div class="controlbar" aria-label="재생 제어">${ebutton('shuffle','shuffle','새 배열')}${ebutton('step-back','step-back','한 단계 이전')}${ebutton('play','play','재생 또는 일시정지','play-button','id="play-button"')}${ebutton('step-forward','step-forward','한 단계 다음')}${ebutton('reset','reset','처음부터 다시 정렬')}</div>`; }
 function topBar(withAlgo = true) { return `<div class="header-row"><div>${withAlgo?`<button class="algo-trigger" data-action="picker-main" aria-label="정렬 알고리즘 선택" title="알고리즘 선택">${shortName(state.algo)}<span class="muted-icon">${icon('chevron',14)}</span></button>`:''}</div><div class="header-right">${ebutton('details','info','정렬 정보')}${ebutton('sound','volume', '소리 켜기 또는 끄기','icon-btn','id="sound-button"')}${ebutton('settings','settings','설정')}${ebutton('focus','expand','집중 모드')}</div></div>`; }
@@ -64,7 +65,8 @@ function renderPage() {
   } else if (state.page === 'compare') {
     el.innerHTML = `<section class="screen compare-screen"><div class="compare-header"><h1 class="compact-heading">비교</h1><div class="header-right">${ebutton('sound','volume','소리 켜기 또는 끄기','icon-btn','id="sound-button"')}${ebutton('settings','settings','설정')}</div></div><div class="compare-grid">${state.compareIds.map((id,i)=>`<div class="compare-card"><div class="compare-card-head"><button class="compare-select" data-action="picker-compare" data-index="${i}" title="정렬 알고리즘 바꾸기">${shortName(id)} ${icon('chevron',12)}</button>${ebutton('compare-sound',state.compareSoundIndex===i?'sound':'dots',`이 알고리즘 소리 재생`,'icon-btn'+(state.compareSoundIndex===i?' selected':''),`data-index="${i}"`)}</div><canvas id="compare-${i}" role="img" aria-label="${shortName(id)} 정렬 시각화"></canvas><div class="compare-actions"><span id="compare-stat-${i}" class="compare-stat"></span><span class="compare-stat" id="compare-end-${i}"></span></div></div>`).join('')}</div><div class="compare-footer">${meter()}${controls()}</div><div id="settings-host"></div></section>`;
     const data = newSource();
-    compareEngines = state.compareIds.map(id => new SortEngine(id,data));
+    const sharedData = commonCompareData(data);
+    compareEngines = state.compareIds.map(id => new SortEngine(id,sharedData));
     compareViews = compareEngines.map((_,i)=>new BarView($('#compare-'+i),{compact:true}));
     showCompareLimits(data);
   } else if (state.page === 'library') {
@@ -77,7 +79,7 @@ function renderPage() {
 
 function escapeHtml(str) { return String(str).replace(/[&<>"']/g,v=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[v])); }
 function showAlgoLimit(eng) { if (eng.initial.length !== state.count) toast(`${eng.algorithm.en}: 배열을 ${eng.initial.length}개로 제한했습니다.`); }
-function showCompareLimits(source) { const limited = compareEngines.filter(e => e.initial.length !== source.length); if (limited.length) toast('일부 특수 정렬은 배열 크기가 자동 제한됩니다.'); }
+function showCompareLimits(source) { const limited = compareEngines.filter(e => e.initial.length !== source.length); if (limited.length) toast('공정한 비교를 위해 모든 알고리즘에 같은 크기의 배열을 사용합니다.'); }
 function handleCanvasHover(evt) {
   if (!engineView || !engine) return;
   const index = engineView.nearestIndex(evt.clientX), rect = evt.currentTarget.getBoundingClientRect();
@@ -133,7 +135,7 @@ function resetCurrent(changeArray = false) {
   opAccumulator = 0;
   const source = changeArray ? newSource() : state.page === 'visual' ? engine?.initial || newSource() : compareEngines[0]?.initial || newSource();
   if (state.page === 'visual') { engine = new SortEngine(state.algo, source); showAlgoLimit(engine); }
-  if (state.page === 'compare') { compareEngines = state.compareIds.map(id => new SortEngine(id,source)); showCompareLimits(source); }
+  if (state.page === 'compare') { const sharedData = commonCompareData(source); compareEngines = state.compareIds.map(id => new SortEngine(id,sharedData)); showCompareLimits(source); }
   setPlayIcon(); updateStats();
 }
 function togglePlay() {
