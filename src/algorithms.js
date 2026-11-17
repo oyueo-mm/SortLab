@@ -126,7 +126,7 @@ export const algorithms = [
   { id:'bead', name:'비드 정렬', en:'Bead Sort', category:'이색·비효율', avg:'구현 방식에 따라 다름', space:'O(n + k)', stable:false, fn:bead, maxSize:80 }
 ];
 
-const quadraticIds = new Set(['bubble','selection','exchange','cocktail','comb','gnome','oddEven','doubleSelection','bingo','insertion','binaryInsertion','cycle','pancake','circle','patience','strand','pairInsertion','doubleInsertion','inplaceMerge','grailStyle','wikiStyle','sqrtSort','flashSort']);
+const quadraticIds = new Set(['bubble','selection','exchange','cocktail','comb','gnome','oddEven','doubleSelection','bingo','insertion','binaryInsertion','cycle','pancake','circle','patience','strand','librarySort','pairInsertion','doubleInsertion','inplaceMerge','grailStyle','wikiStyle','sqrtSort','flashSort']);
 for (const algo of algorithms) if (quadraticIds.has(algo.id)) algo.maxSize = Math.min(algo.maxSize || Infinity, 2000);
 export const algorithmById = Object.fromEntries(algorithms.map(a => [a.id, a]));
 
