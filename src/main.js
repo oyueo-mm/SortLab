@@ -9,6 +9,7 @@ import { SortAudio } from './audio.js';
 import { icon } from './icons.js';
 import { algorithmDescriptions } from './descriptions.js';
 import { CATEGORY_TITLES, groupCatalogAlgorithms, getGuideEntry } from './catalog.js';
+import { guideIndexMarkup, guideArticleMarkup } from './guide-ui.js';
 import { CATALOG_CATEGORIES, LIBRARY_DEFAULT_SPEED, LIBRARY_SPEEDS, LIBRARY_COMPLETE_HOLD_MS, libraryInputSize, libraryEventsPerSecond, filterLibraryAlgorithms, algorithmsInCollection, isExperimentalSort, advanceLibraryCard } from './library.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -131,6 +132,11 @@ function renderLibraryGallery() {
   if ('IntersectionObserver' in window) { libraryObserver = new IntersectionObserver((entries) => { for (const entry of entries) { const card = libraryCards.find(c=>c.node===entry.target); if(card) card.visible=entry.isIntersecting; } }, {root:$('#workspace'),rootMargin:'60px 0px 60px 0px',threshold:0}); libraryCards.forEach(c=>libraryObserver.observe(c.node)); }
   else libraryCards.forEach(c=>{c.visible=true;});
 }
+function renderGuideIndex() {const root=$('#guide-index-list');if(!root)return;root.innerHTML=guideIndexMarkup(standardAlgorithms,state.guideSelected,state.guideQuery);}
+function renderGuideArticle() {const host=$('#guide-article');if(!host)return;const entry=getGuideEntry(state.guideSelected,algorithmById,algorithmDescriptions,standardAlgorithms)||getGuideEntry('bubble',algorithmById,algorithmDescriptions,standardAlgorithms);state.guideSelected=entry.algo.id;host.innerHTML=guideArticleMarkup(entry);guideEngine=new SortEngine(entry.algo.id,generateData(libraryInputSize(entry.algo),'random'));guideView=new BarView($('#guide-canvas'),{palette:state.palette});guidePlaying=true;guideAccumulator=0;guideLastDraw=0;guideView.draw(guideEngine.values);updateGuidePlayIcon();}
+function updateGuidePlayIcon() {const btn=$('#guide-play');if(btn){btn.innerHTML=icon(guidePlaying?'pause':'play',19);btn.title=guidePlaying?'일시정지':'재생';btn.setAttribute('aria-label',btn.title);}}
+function resetGuide(fresh=false) {if(!guideEngine)return;const seed=fresh?generateData(libraryInputSize(algorithmById[state.guideSelected]),'random'):guideEngine.initial;guideEngine=new SortEngine(state.guideSelected,seed);guideAccumulator=0;guidePlaying=true;guideLastDraw=0;guideView?.draw(guideEngine.values,{now:performance.now()});updateGuidePlayIcon();}
+function updateGuideFrame(dt,now) {if(!guideEngine||!guideView)return;if(guidePlaying){if(!guideEngine.completed)guideAccumulator=advanceLibraryCard(guideEngine,guideAccumulator,dt,2);if(guideEngine.completed){guidePlaying=false;updateGuidePlayIcon();}}if(now-guideLastDraw>=25||!guideLastDraw){guideView.draw(guideEngine.values,{highlight:guideEngine.highlight,completed:guideEngine.completed&&!guideEngine.failed,finishedAt:guideEngine.finishedAt,now,altered:!!guideEngine.algorithm.altersInput});guideLastDraw=now;}}
 function renderLibraryPanel() {
   const el=$('#gallery-panel'); if(!el)return;
   el.hidden=!state.libraryPanel;
@@ -237,7 +243,7 @@ function actionHandler(event) {
   if (action==='focus') { if (state.page!=='visual') return; state.focus=!state.focus; app.classList.toggle('focus',state.focus); app.classList.toggle('reveal',state.focus); if (state.focus) revealFocus(); else app.classList.remove('reveal'); return; }
   if (action==='details') {state.guideSelected=state.algo;navigation('guide');return;}
   if (action==='compare-sound') { state.compareSoundIndex=Number(button.dataset.index); document.querySelectorAll('[data-action="compare-sound"]').forEach(el=>{ const selected=Number(el.dataset.index)===state.compareSoundIndex; el.classList.toggle('selected',selected); el.innerHTML=icon(selected?'sound':'dots'); }); return; }
-  if (action==='guide-select'||action==='guide-related') { const id=button.dataset.id;if(!getGuideEntry(id,algorithmById,algorithmDescriptions,standardAlgorithms))return;state.guideSelected=id;renderGuideIndex();renderGuideArticle();const article=$('#guide-article');if(article)article.scrollTop=0;return; }
+  if (action==='guide-select'||action==='guide-related') { const id=button.dataset.id;if(!getGuideEntry(id,algorithmById,algorithmDescriptions,standardAlgorithms))return;const menuScroll=$('#guide-index-list')?.scrollTop||0;state.guideSelected=id;renderGuideIndex();if($('#guide-index-list'))$('#guide-index-list').scrollTop=menuScroll;renderGuideArticle();const article=$('#guide-article');if(article)article.scrollTop=0;return; }
   if (action==='guide-play') {if(!guideEngine)return;if(guideEngine.completed)resetGuide(true);else guidePlaying=!guidePlaying;updateGuidePlayIcon();return;}
   if (action==='guide-reset')return resetGuide(false);
   if (action==='guide-new')return resetGuide(true);
