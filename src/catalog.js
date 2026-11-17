@@ -1,0 +1,5 @@
+import { CATALOG_CATEGORIES } from './library.js';
+import { guideNotes,complexityCases } from './guide-notes.js';
+export const CATEGORY_TITLES = Object.freeze({'기초·교환':'기초·교환 계열','삽입·간격':'삽입 계열','퀵·분할':'퀵 계열','병합':'병합 계열','힙·트리':'힙·트리 계열','분포·기수':'분포·기수 계열','하이브리드':'하이브리드 계열','정렬 네트워크':'정렬 네트워크','이색·비효율':'기타 정렬'});
+export function groupCatalogAlgorithms(items,categories=CATALOG_CATEGORIES){return categories.map(category=>({category,title:CATEGORY_TITLES[category]||category,items:items.filter(a=>a.category===category)})).filter(group=>group.items.length>0);}
+export function getGuideEntry(id,byId,descriptions,standard){const algo=byId[id];if(!algo||algo.category==='패러디')return null;const notes=guideNotes[id],description=descriptions[id];if(!notes||!description)return null;const related=standard.filter(a=>a.category===algo.category&&a.id!==id).slice(0,4);const verifiedCases=complexityCases[id];return {algo,summary:description.summary,detail:description.detail,steps:notes.steps,strength:notes.strength,weakness:notes.weakness,related,best:verifiedCases?.[0]||null,worst:verifiedCases?.[1]||null};}
