@@ -2,6 +2,8 @@ import { algorithms, algorithmById } from './algorithms.js';
 import { generateData, patterns } from './data.js';
 import { SortEngine, speedToEventsPerSecond } from './engine.js';
 import { BarView } from './visual.js';
+import { PALETTE_LABELS } from './palette.js';
+import { SortImageAsset, ImageSortView, IMAGE_MODES, IMAGE_PIECES, IMAGE_THEMES, PIXEL_METRICS, imageCountFor, imageInputFor } from './image-sort.js';
 import { SortAudio } from './audio.js';
 import { icon } from './icons.js';
 import { algorithmDescriptions } from './descriptions.js';
@@ -10,11 +12,18 @@ import { CATALOG_CATEGORIES, LIBRARY_DEFAULT_SPEED, LIBRARY_SPEEDS, LIBRARY_COMP
 const $ = (selector, root = document) => root.querySelector(selector);
 const app = $('#app');
 const sidebarMedia = window.matchMedia('(min-width: 621px)');
-const initial = { page: 'home', algo: 'quickHoare', pattern: 'random', count: 100, speed: 82, style: 'bars', soundOn: true, volume: 70, soundStyle: 'retro', sidebar: sidebarMedia.matches };
+const initial = { page: 'home', algo: 'quickHoare', pattern: 'random', count: 100, speed: 82, style: 'bars', palette: 'rainbow', imageMode: 'strips', imageCount: 128, imageTheme: 'lake', imageMetric: 'brightness', soundOn: true, volume: 70, soundStyle: 'retro', sidebar: sidebarMedia.matches };
 let cached = {};
 try { cached = JSON.parse(localStorage.getItem('sortlab:prefs') || '{}') || {}; } catch { /* private browsing */ }
 const state = { ...initial, ...cached, page: 'home', sidebar: sidebarMedia.matches, settings: false, picker: false, pickerCategory: '전체', pickerQuery: '', pickerTarget: 'main', librarySelected: 'quickHoare', libraryQuery: '', experimentQuery: '', libraryCategory: '전체', librarySpeed: LIBRARY_SPEEDS.includes(Number(cached.librarySpeed)) ? Number(cached.librarySpeed) : LIBRARY_DEFAULT_SPEED, librarySortMode: ['learning','name','complexity'].includes(cached.librarySortMode)?cached.librarySortMode:'learning', libraryPanel: '', compareIds: ['bubble', 'quickHoare', 'merge', 'heap'], compareSoundIndex: 1, playing: false, focus: false };
 state.count = Math.max(5,Math.min(10000,Number.isFinite(Number(state.count))?Math.round(Number(state.count)):100));
+if(!['bars','dots','circle','image'].includes(state.style))state.style='bars';
+if(!PALETTE_LABELS[state.palette])state.palette='rainbow';
+if(!IMAGE_MODES[state.imageMode])state.imageMode='strips';
+if(!PIXEL_METRICS[state.imageMetric])state.imageMetric='brightness';
+if(!IMAGE_THEMES[state.imageTheme])state.imageTheme='lake';
+state.imageCount=imageCountFor(state.imageMode,state.imageCount||128);
+let imageAsset=SortImageAsset.sample(state.imageTheme);
 const sound = new SortAudio();
 sound.enabled = state.soundOn;
 sound.volume = state.volume / 100;
@@ -28,10 +37,14 @@ const experimentAlgorithms = algorithmsInCollection(algorithms,'experiment');
 if (!algorithmById[state.algo] || isExperimentalSort(algorithmById[state.algo])) state.algo = 'quickHoare';
 const sortedDemoIds = ['bubble', 'insertion', 'quickHoare', 'merge', 'heap', 'shell', 'cocktail', 'radixLsd', 'selection', 'timsort', 'pancake', 'comb'];
 
-function persist() { const { algo, pattern, count, speed, style, soundOn, volume, soundStyle, librarySpeed, librarySortMode } = state; try { localStorage.setItem('sortlab:prefs', JSON.stringify({ algo, pattern, count, speed, style, soundOn, volume, soundStyle, librarySpeed, librarySortMode })); } catch { /* privacy mode */ } }
+function persist() { const { algo, pattern, count, speed, style, palette, imageMode, imageCount, imageTheme, imageMetric, soundOn, volume, soundStyle, librarySpeed, librarySortMode } = state; try { localStorage.setItem('sortlab:prefs', JSON.stringify({ algo, pattern, count, speed, style, palette, imageMode, imageCount, imageTheme, imageMetric, soundOn, volume, soundStyle, librarySpeed, librarySortMode })); } catch { /* privacy mode */ } }
 function ebutton(action, symbol, label, css = 'icon-btn', extra = '') { return `<button type="button" class="${css}" data-action="${action}" aria-label="${label}" title="${label}" ${extra}>${icon(symbol)}</button>`; }
 function formatCount(n) { return n.toLocaleString('ko-KR'); }
-function shortName(id) { return algorithmById[id]?.en.split(' · ')[0] || id; }
+function shortName(id) { return algorithmById[id]?.name || id; }
+function algoTitle(id) { const a=algorithmById[id];return a?`<span class="algo-title-stack"><span class="algo-ko">${escapeHtml(a.name)}</span><span class="algo-en">${escapeHtml(a.en)}</span></span>`:escapeHtml(id); }
+function effectiveImageCount() { const chosen=state.page==='compare'?state.compareIds:[state.algo];const limit=Math.min(...chosen.map(id=>algorithmById[id]?.maxSize||Infinity));return imageCountFor(state.imageMode,state.imageCount,limit); }
+function makeView(canvas,compact=false) { return state.style==='image'?new ImageSortView(canvas,{asset:imageAsset,mode:state.imageMode,metric:state.imageMetric,compact}):new BarView(canvas,{compact,style:state.style,palette:state.palette}); }
+function refreshVisualViews(){if(state.page==='visual'&&$('#main-canvas'))engineView=makeView($('#main-canvas'));if(state.page==='compare'&&compareViews.length)compareViews=compareViews.map((_,i)=>makeView($('#compare-'+i),true));const cv=$('#main-canvas');if(cv)cv.setAttribute('aria-label',state.style==='image'?'이미지 정렬 시각화':'정렬 과정 시각화');}
 function toast(message) { const t = $('#toast'); if (!t) return; t.textContent = message; t.classList.add('show'); clearTimeout(toastTimeout); toastTimeout = setTimeout(() => t.classList.remove('show'), 3400); }
 
 function renderShell() {
@@ -45,11 +58,11 @@ function renderShell() {
   renderPage();
 }
 
-function newSource() { return generateData(state.count, state.pattern); }
+function newSource(shufflePixels=false) { if(state.style==='image'&&['visual','compare'].includes(state.page))return imageInputFor(imageAsset,state.imageMode,effectiveImageCount(),state.pattern,state.imageMetric,shufflePixels);return generateData(state.count,state.pattern); }
 function commonCompareData(input) { let n = input.length; for (const id of state.compareIds) { const algo = algorithmById[id]; if (algo.maxSize) n = Math.min(n, algo.maxSize); } if (state.compareIds.some(id => algorithmById[id].powerOfTwo)) n = 2 ** Math.floor(Math.log2(n)); return input.slice(0, Math.max(2,n)); }
 function meter() { return '<div class="meter" id="meter" role="progressbar" aria-label="정렬 진행 상태"></div>'; }
 function controls(compact = false) { return `<div class="controlbar" aria-label="재생 제어">${ebutton('shuffle','shuffle','새 배열')}${ebutton('step-back','step-back','한 단계 이전')}${ebutton('play','play','재생 또는 일시정지','play-button','id="play-button"')}${ebutton('step-forward','step-forward','한 단계 다음')}${ebutton('reset','reset','처음부터 다시 정렬')}</div>`; }
-function topBar(withAlgo = true) { return `<div class="header-row"><div>${withAlgo?`<button class="algo-trigger" data-action="picker-main" aria-label="정렬 알고리즘 선택" title="알고리즘 선택">${shortName(state.algo)}<span class="muted-icon">${icon('chevron',14)}</span></button>`:''}</div><div class="header-right">${ebutton('details','info','정렬 정보')}${ebutton('sound','volume', '소리 켜기 또는 끄기','icon-btn','id="sound-button"')}${ebutton('settings','settings','설정')}${ebutton('focus','expand','집중 모드')}</div></div>`; }
+function topBar(withAlgo = true) { return `<div class="header-row"><div>${withAlgo?`<button class="algo-trigger" data-action="picker-main" aria-label="정렬 알고리즘 선택" title="알고리즘 선택">${algoTitle(state.algo)}<span class="muted-icon">${icon('chevron',14)}</span></button>`:''}</div><div class="header-right">${ebutton('details','info','정렬 정보')}${ebutton('sound','volume', '소리 켜기 또는 끄기','icon-btn','id="sound-button"')}${ebutton('settings','settings','설정')}${ebutton('focus','expand','집중 모드')}</div></div>`; }
 
 function renderPage() {
   state.settings = false;
@@ -63,20 +76,20 @@ function renderPage() {
   if (!el) return;
   if (state.page === 'home') {
     el.innerHTML = `<section class="screen home-screen"><div class="home-copy"><h1 class="home-title">SortLab</h1><button class="home-start" data-action="nav" data-page="visual">시작하기 ${icon('arrow',17)}</button></div><div class="home-mosaic">${[0,1,2,3].map(i => `<div class="home-mini" role="button" tabindex="0" data-action="mini" data-index="${i}" aria-label="미니 정렬 시각화 시작"><canvas id="mini-${i}" aria-hidden="true"></canvas><span class="mini-name" id="mini-name-${i}"></span><span class="mini-status"></span></div>`).join('')}</div></section>`;
-    miniEngines = [0,1,2,3].map((i) => { const id = sortedDemoIds[[0,2,3,4][i]], source = new SortEngine(id,generateData(46,'random',Math.random())); $('#mini-name-'+i).textContent = shortName(id); return { engine: source, view: new BarView($('#mini-'+i),{ compact:true }), lastComplete:0, id }; });
+    miniEngines = [0,1,2,3].map((i) => { const id = sortedDemoIds[[0,2,3,4][i]], source = new SortEngine(id,generateData(46,'random',Math.random())); $('#mini-name-'+i).textContent = shortName(id); return { engine: source, view: new BarView($('#mini-'+i),{ compact:true,palette:state.palette }), lastComplete:0, id }; });
   } else if (state.page === 'visual') {
     el.innerHTML = `<section class="screen visual-screen">${topBar(true)}<div class="visual-stage" id="main-stage"><canvas id="main-canvas" aria-label="정렬 과정 막대 시각화" role="img"></canvas><div id="hover-readout" class="hover-readout" aria-hidden="true"></div></div>${meter()}${controls()}<div class="micro-stats" id="main-stats"></div><div id="settings-host"></div></section>`;
     engine = new SortEngine(state.algo,newSource());
-    engineView = new BarView($('#main-canvas'),{ style:state.style });
+    engineView = makeView($('#main-canvas'));
     $('#main-canvas').addEventListener('pointermove',handleCanvasHover);
     $('#main-canvas').addEventListener('pointerleave',()=>{ engineView.hover = -1; $('#hover-readout')?.classList.remove('visible'); });
     showAlgoLimit(engine);
   } else if (state.page === 'compare') {
-    el.innerHTML = `<section class="screen compare-screen"><div class="compare-header"><h1 class="compact-heading">비교</h1><div class="header-right">${ebutton('sound','volume','소리 켜기 또는 끄기','icon-btn','id="sound-button"')}${ebutton('settings','settings','설정')}</div></div><div class="compare-grid">${state.compareIds.map((id,i)=>`<div class="compare-card"><div class="compare-card-head"><button class="compare-select" data-action="picker-compare" data-index="${i}" title="정렬 알고리즘 바꾸기">${shortName(id)} ${icon('chevron',12)}</button>${ebutton('compare-sound',state.compareSoundIndex===i?'sound':'dots',`이 알고리즘 소리 재생`,'icon-btn'+(state.compareSoundIndex===i?' selected':''),`data-index="${i}"`)}</div><canvas id="compare-${i}" role="img" aria-label="${shortName(id)} 정렬 시각화"></canvas><div class="compare-actions"><span id="compare-stat-${i}" class="compare-stat"></span><span class="compare-stat" id="compare-end-${i}"></span></div></div>`).join('')}</div><div class="compare-footer">${meter()}${controls()}</div><div id="settings-host"></div></section>`;
+    el.innerHTML = `<section class="screen compare-screen"><div class="compare-header"><h1 class="compact-heading">비교</h1><div class="header-right">${ebutton('sound','volume','소리 켜기 또는 끄기','icon-btn','id="sound-button"')}${ebutton('settings','settings','설정')}</div></div><div class="compare-grid">${state.compareIds.map((id,i)=>`<div class="compare-card"><div class="compare-card-head"><button class="compare-select" data-action="picker-compare" data-index="${i}" title="정렬 알고리즘 바꾸기">${algoTitle(id)} ${icon('chevron',12)}</button>${ebutton('compare-sound',state.compareSoundIndex===i?'sound':'dots',`이 알고리즘 소리 재생`,'icon-btn'+(state.compareSoundIndex===i?' selected':''),`data-index="${i}"`)}</div><canvas id="compare-${i}" role="img" aria-label="${shortName(id)} 정렬 시각화"></canvas><div class="compare-actions"><span id="compare-stat-${i}" class="compare-stat"></span><span class="compare-stat" id="compare-end-${i}"></span></div></div>`).join('')}</div><div class="compare-footer">${meter()}${controls()}</div><div id="settings-host"></div></section>`;
     const data = newSource();
     const sharedData = commonCompareData(data);
     compareEngines = state.compareIds.map(id => new SortEngine(id,sharedData));
-    compareViews = compareEngines.map((_,i)=>new BarView($('#compare-'+i),{compact:true}));
+    compareViews = compareEngines.map((_,i)=>makeView($('#compare-'+i),true));
     showCompareLimits(data);
   } else if (state.page === 'library' || state.page === 'experiment') {
     const experimental = state.page === 'experiment';
@@ -88,7 +101,7 @@ function renderPage() {
 }
 
 function escapeHtml(str) { return String(str).replace(/[&<>"']/g,v=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[v])); }
-function showAlgoLimit(eng) { if (eng.initial.length !== state.count) toast(`${eng.algorithm.en}: 배열을 ${eng.initial.length}개로 제한했습니다.`); }
+function showAlgoLimit(eng) { if (eng.initial.length !== (state.style==='image'?state.imageCount:state.count)) toast(`${eng.algorithm.en}: 배열을 ${eng.initial.length}개로 제한했습니다.`); }
 function showCompareLimits(source) { const limited = compareEngines.filter(e => e.initial.length !== source.length); if (limited.length) toast('공정한 비교를 위해 모든 알고리즘에 같은 크기의 배열을 사용합니다.'); else if(compareEngines.some(e=>e.algorithm.altersInput||e.algorithm.mayNotFinish))toast('패러디: 값 삭제·변경이나 미완료가 발생할 수 있어 일반 정렬과 직접 비교하기 어렵습니다.'); }
 function handleCanvasHover(evt) {
   if (!engineView || !engine) return;
@@ -100,7 +113,7 @@ function handleCanvasHover(evt) {
   readout.style.top = `${evt.clientY - rect.top}px`;
   readout.classList.add('visible');
 }
-function libraryCardMarkup(a) { return `<button type="button" class="gallery-card${a.category==='패러디'?' parody-card':''}" data-action="library-select" data-id="${a.id}" aria-label="${escapeHtml(a.name)} 자세히 보기" title="${escapeHtml(a.name)}"><span class="gallery-card-name">${escapeHtml(a.name)}</span>${a.category==='패러디'?'<span class="gallery-card-type">실험</span>':''}<span class="gallery-canvas"><canvas id="gallery-${a.id}" aria-hidden="true"></canvas></span><span class="gallery-card-bottom"><span class="gallery-status" aria-hidden="true"></span></span></button>`; }
+function libraryCardMarkup(a) { return `<button type="button" class="gallery-card${a.category==='패러디'?' parody-card':''}" data-action="library-select" data-id="${a.id}" aria-label="${escapeHtml(a.name)} 자세히 보기" title="${escapeHtml(a.name)}"><span class="gallery-card-name">${escapeHtml(a.name)}</span><span class="gallery-card-en">${escapeHtml(a.en)}</span>${a.category==='패러디'?'<span class="gallery-card-type">실험</span>':''}<span class="gallery-canvas"><canvas id="gallery-${a.id}" aria-hidden="true"></canvas></span><span class="gallery-card-bottom"><span class="gallery-status" aria-hidden="true"></span></span></button>`; }
 function renderLibraryGallery() {
   const root = $('#library-items'); if (!root) return;
   if (libraryObserver) libraryObserver.disconnect(); libraryObserver = null;
@@ -108,7 +121,7 @@ function renderLibraryGallery() {
   const count = $('#gallery-count'); if (count) count.textContent = items.length;
   root.innerHTML = items.length ? items.map(libraryCardMarkup).join('') : `<div class="gallery-empty">검색 결과가 없습니다.</div>`;
   const start = performance.now();
-  libraryCards = items.map((a,i) => { const node = root.querySelector(`[data-id="${a.id}"]`), canvas = node.querySelector('canvas'); return { id:a.id, node, engine:new SortEngine(a.id, generateData(libraryInputSize(a), 'random')), view:new BarView(canvas,{compact:true}), visible:false, accumulator:0, nextStart:start+(i%7)*110, lastDraw:0 }; });
+  libraryCards = items.map((a,i) => { const node = root.querySelector(`[data-id="${a.id}"]`), canvas = node.querySelector('canvas'); return { id:a.id, node, engine:new SortEngine(a.id, generateData(libraryInputSize(a), 'random')), view:new BarView(canvas,{compact:true,palette:state.palette}), visible:false, accumulator:0, nextStart:start+(i%7)*110, lastDraw:0 }; });
   if ('IntersectionObserver' in window) { libraryObserver = new IntersectionObserver((entries) => { for (const entry of entries) { const card = libraryCards.find(c=>c.node===entry.target); if(card) card.visible=entry.isIntersecting; } }, {root:$('#workspace'),rootMargin:'60px 0px 60px 0px',threshold:0}); libraryCards.forEach(c=>libraryObserver.observe(c.node)); }
   else libraryCards.forEach(c=>{c.visible=true;});
 }
@@ -125,7 +138,7 @@ function openLibraryDetail(id) {
   const current=libraryCards.find(c=>c.id===id); const seed=current ? current.engine.initial : generateData(libraryInputSize(a),'random'); const desc=algorithmDescriptions[a.id]; const resultType=a.altersInput?'원본 값 변경':a.mayNotFinish?'완료 보장 없음':a.category==='패러디'?'원본 보존 · 정렬 완료':'원본 값 보존';
   libraryDetail={id,engine:new SortEngine(id,seed),view:null,playing:true,accumulator:0,lastDraw:0};
   $('#modal-root').innerHTML=`<div class="overlay library-overlay" data-action="library-close"><section class="gallery-detail-modal" role="dialog" aria-modal="true" aria-labelledby="gallery-detail-title"><div class="gallery-detail-head"><div><h2 id="gallery-detail-title">${escapeHtml(a.name)}</h2><span class="gallery-detail-en">${escapeHtml(a.en)}</span></div>${ebutton('library-close','close','상세 닫기')}</div><div class="gallery-detail-stage"><canvas id="gallery-detail-canvas" role="img" aria-label="${escapeHtml(a.name)} 정렬 미리보기"></canvas></div>${a.category==='패러디'?'<div class="experiment-warning">패러디·실험 — 일반 도감과 분리된 실험 항목입니다.</div>':''}<div class="gallery-detail-explain">${escapeHtml(desc.summary)}<span>${escapeHtml(desc.detail)}</span></div><div class="gallery-detail-controls">${ebutton('library-detail-reset','reset','다시 정렬')}${ebutton('library-detail-play','pause','일시정지','icon-btn gallery-detail-play','id="gallery-detail-play"')}${ebutton('library-detail-step','step-forward','한 단계 진행')}${ebutton('library-detail-new','shuffle','새 배열')}</div><div class="gallery-detail-facts"><div><span>평균</span><strong>${escapeHtml(a.avg)}</strong></div><div><span>공간</span><strong>${escapeHtml(a.space)}</strong></div><div><span>유형</span><strong>${escapeHtml(a.category==='패러디'?'패러디·실험':a.category)}</strong></div><div><span>${a.category==='패러디'?'결과':'안정성'}</span><strong>${a.category==='패러디'?resultType:a.stable?'안정':'비안정'}</strong></div></div>${a.category==='패러디'?'':`<button type="button" class="gallery-open" data-action="library-open">시각화로 이동 ${icon('arrow',16)}</button>`}</section></div>`;
-  libraryDetail.view=new BarView($('#gallery-detail-canvas'));
+  libraryDetail.view=new BarView($('#gallery-detail-canvas'),{palette:state.palette});
   $('#modal-root [data-action="library-close"]:not(.overlay)')?.focus();
 }
 function closeLibraryDetail() { if(!libraryDetail)return; libraryDetail=null; $('#modal-root').replaceChildren(); if(libraryDetailFocus?.isConnected)libraryDetailFocus.focus(); libraryDetailFocus=null; }
@@ -156,7 +169,7 @@ function renderSettings() {
 }
 function openPicker(target) {
   state.picker = true; state.pickerTarget = target; state.pickerCategory = '전체'; state.pickerQuery = '';
-  $('#modal-root').innerHTML = `<div class="overlay" data-action="close-picker"><div class="picker" role="dialog" aria-modal="true" aria-label="알고리즘 선택"><div class="picker-top">${icon('search')}<input autofocus placeholder="정렬 알고리즘 검색" aria-label="알고리즘 검색" id="picker-query" autocomplete="off" />${ebutton('close-picker','close','닫기')}</div><div class="picker-tabs" id="picker-tabs"></div><div class="picker-items" id="picker-items"></div></div></div>`;
+  $('#modal-root').innerHTML = `<div class="overlay" data-action="close-picker"><div class="picker" role="dialog" aria-modal="true" aria-label="알고리즘 선택"><div class="picker-top">${icon('search')}<input autofocus placeholder="정렬 알고리즘 검색" aria-label="알고리즘 검색" id="picker-query" autocomplete="off" />${ebutton('close-picker','close','닫기')}</div><div class="picker-categories">${ebutton('picker-scroll','chevron','분류 왼쪽으로','icon-btn picker-scroll-left')}<div class="picker-tabs" id="picker-tabs"></div>${ebutton('picker-scroll','chevron','분류 오른쪽으로','icon-btn picker-scroll-right')}</div><div class="picker-items" id="picker-items"></div></div></div>`;
   $('#picker-query').focus();
   renderPickerItems();
 }
@@ -165,13 +178,13 @@ function renderPickerItems() {
   const tabs = $('#picker-tabs'), items = $('#picker-items'); if (!tabs || !items) return;
   tabs.innerHTML = categories.map(category=>`<button class="tab-chip ${state.pickerCategory===category?'active':''}" data-action="picker-category" data-value="${category}">${category}</button>`).join('');
   const filtered = standardAlgorithms.filter(a=>(state.pickerCategory==='전체'||a.category===state.pickerCategory)&&`${a.name} ${a.en}`.toLowerCase().includes(state.pickerQuery.toLowerCase().trim()));
-  items.innerHTML = filtered.length ? filtered.map(a=>`<button class="picker-item" data-action="picker-select" data-id="${a.id}"><span>${escapeHtml(a.name)}</span><small>${escapeHtml(a.avg)}</small></button>`).join('') : '<div class="empty-text">결과가 없습니다.</div>';
+  items.innerHTML = filtered.length ? filtered.map(a=>`<button class="picker-item" data-action="picker-select" data-id="${a.id}"><span class="picker-item-name"><strong>${escapeHtml(a.name)}</strong><span>${escapeHtml(a.en)}</span></span><small>${escapeHtml(a.avg)}</small></button>`).join('') : '<div class="empty-text">결과가 없습니다.</div>';
 }
 function navigation(page) { if (!['home','visual','compare','library','experiment'].includes(page)) return; state.page = page; if (!sidebarMedia.matches) { state.sidebar = false; $('#layout').classList.remove('expanded'); } renderPage(); }
 function resetCurrent(changeArray = false) {
   state.playing = false;
   opAccumulator = 0;
-  const source = changeArray ? newSource() : state.page === 'visual' ? engine?.initial || newSource() : compareEngines[0]?.initial || newSource();
+  const source = changeArray ? newSource(true) : state.page === 'visual' ? engine?.initial || newSource() : compareEngines[0]?.initial || newSource();
   if (state.page === 'visual') { engine = new SortEngine(state.algo, source); showAlgoLimit(engine); }
   if (state.page === 'compare') { const sharedData = commonCompareData(source); compareEngines = state.compareIds.map(id => new SortEngine(id,sharedData)); showCompareLimits(source); }
   setPlayIcon(); updateStats();
