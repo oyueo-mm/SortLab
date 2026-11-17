@@ -29,20 +29,25 @@ export class BarView {
     ctx.fillStyle = this.compact ? '#f5f7fb' : '#ffffff'; ctx.fillRect(0, 0, w, h);
     if (!values.length) return;
     this.lastValues = values;
-    const max = Math.max(1, ...values), n = values.length;
+    const max = Math.max(1, ...values), total = values.length;
     const padX = this.compact ? 7 : Math.min(20, w * 0.025);
+    const maxColumns = Math.max(24, Math.floor((w - padX * 2) * 1.5));
+    const n = Math.min(total, maxColumns);
+    let shown = values;
+    if (total > n) { const bins = new Float64Array(n); for (let i = 0; i < total; i++) { const bin = Math.min(n - 1, Math.floor(i * n / total)); if (values[i] > bins[bin]) bins[bin] = values[i]; } shown = bins; }
     const padB = this.compact ? 8 : 16, top = this.compact ? 9 : 16;
     const bw = (w - padX * 2) / n;
     const scaleHeight = h - top - padB;
     const completeFraction = completed ? Math.min(1, Math.max(0, (now - finishedAt) / (this.compact ? 350 : 730))) : 0;
-    const activeA = highlight?.i ?? -1, activeB = highlight?.j ?? -1;
+    const visualIndex = i => i < 0 ? -1 : Math.min(n - 1, Math.floor(i * n / total));
+    const activeA = visualIndex(highlight?.i ?? -1), activeB = visualIndex(highlight?.j ?? -1);
     for (let i = 0; i < n; i++) {
-      const x = padX + i * bw, val = values[i], barH = Math.max(2, (val / max) * scaleHeight);
+      const x = padX + i * bw, val = shown[i], barH = Math.max(2, (val / max) * scaleHeight);
       let color = colors.normal;
       if (completed) color = i / n <= completeFraction ? (altered ? colors.altered : colors.sorted) : colors.normal;
       else if (highlight?.t === 'p' && activeA === i) color = colors.pivot;
       else if (i === activeA || i === activeB) color = highlight?.t === 's' || highlight?.t === 'w' ? colors.swap : colors.compare;
-      if (!this.compact && i === this.hover && !completed) color = '#2967ca';
+      if (!this.compact && i === visualIndex(this.hover) && !completed) color = '#2967ca';
       ctx.fillStyle = color;
       const gap = bw > 8 ? Math.max(1.5, bw * .16) : bw > 3 ? 1 : 0;
       if (this.style === 'dots' && !this.compact) { ctx.beginPath(); ctx.arc(x + bw / 2, h - padB - barH, Math.max(1.1, Math.min(4, (bw - gap) / 2)), 0, Math.PI * 2); ctx.fill(); }
