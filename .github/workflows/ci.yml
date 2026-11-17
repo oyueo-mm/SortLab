@@ -13,4 +13,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: node --check src/main.js && node --check src/visual.js && node --check src/extra-classic.js && node --check src/extra-advanced.js
       - run: npm test
