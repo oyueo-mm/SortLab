@@ -1,7 +1,7 @@
 name: Check SortLab
 on:
   push:
-    branches: [main, feat/catalog-65-large-arrays]
+    branches: [main, 'feat/**']
   pull_request:
 permissions:
   contents: read
@@ -13,5 +13,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --check src/main.js && node --check src/visual.js && node --check src/extra-classic.js && node --check src/extra-advanced.js
+      - run: node --check src/main.js && node --check src/visual.js && node --check src/image-sort.js && node --check src/settings-ui.js && node --check src/palette.js && node --check src/extra-classic.js && node --check src/extra-advanced.js
       - run: npm test
