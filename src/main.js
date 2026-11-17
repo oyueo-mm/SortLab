@@ -174,7 +174,7 @@ function resetCurrent(changeArray = false,shufflePixels=false) {
   opAccumulator = 0;
   const source = changeArray ? newSource(shufflePixels) : state.page === 'visual' ? engine?.initial || newSource() : compareEngines[0]?.initial || newSource();
   if (state.page === 'visual') { engine = new SortEngine(state.algo, source); showAlgoLimit(engine); }
-  if (state.page === 'compare') { const sharedData = commonCompareData(source); compareEngines = state.compareIds.map(id => new SortEngine(id,sharedData)); showCompareLimits(source); }
+  if (state.page === 'compare') { const sharedData = commonCompareData(source); compareEngines = state.compareIds.map(id => new SortEngine(id,sharedData)); compareEngines.forEach((e,i)=>{const cv=$('#compare-'+i);if(cv)cv.dataset.initialKeyHash=e.initial.reduce((h,v)=>(Math.imul(h^v,16777619)>>>0),2166136261).toString(16);});showCompareLimits(source); }
   if(state.style==='image')refreshVisualViews();
   setPlayIcon(); updateStats();
 }
