@@ -103,13 +103,13 @@ function renderPage() {
 
 function escapeHtml(str) { return String(str).replace(/[&<>"']/g,v=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[v])); }
 function showAlgoLimit(eng) { if (eng.initial.length !== (state.style==='image'?state.imageCount:state.count)) toast(`${eng.algorithm.en}: 배열을 ${eng.initial.length}개로 제한했습니다.`); }
-function showCompareLimits(source) { const limited = compareEngines.filter(e => e.initial.length !== source.length); if (limited.length) toast('공정한 비교를 위해 모든 알고리즘에 같은 크기의 배열을 사용합니다.'); else if(compareEngines.some(e=>e.algorithm.altersInput||e.algorithm.mayNotFinish))toast('패러디: 값 삭제·변경이나 미완료가 발생할 수 있어 일반 정렬과 직접 비교하기 어렵습니다.'); }
+function showCompareLimits(source) { if(state.style==='image'&&source.length!==state.imageCount){toast('선택한 알고리즘의 제한에 맞춰 이미지 조각 수를 '+source.length+'개로 조절했습니다.');return;}const limited = compareEngines.filter(e => e.initial.length !== source.length); if (limited.length) toast('공정한 비교를 위해 모든 알고리즘에 같은 크기의 배열을 사용합니다.'); else if(compareEngines.some(e=>e.algorithm.altersInput||e.algorithm.mayNotFinish))toast('패러디: 값 삭제·변경이나 미완료가 발생할 수 있어 일반 정렬과 직접 비교하기 어렵습니다.'); }
 function handleCanvasHover(evt) {
   if (!engineView || !engine) return;
   const index = engineView.nearestIndex(evt.clientX), rect = evt.currentTarget.getBoundingClientRect();
   engineView.hover = index;
   const readout = $('#hover-readout'); if (!readout) return;
-  readout.textContent = `${index}  ·  ${engine.values[index]}`;
+  readout.textContent = state.style==='image'?(state.imageMode==='pixels'?`픽셀 ${index+1} · 정렬 키 ${engine.values[index]}`:`조각 ${index+1} · 원래 위치 ${engine.values[index]}`):`${index}  ·  ${engine.values[index]}`;
   readout.style.left = `${evt.clientX - rect.left}px`;
   readout.style.top = `${evt.clientY - rect.top}px`;
   readout.classList.add('visible');
@@ -175,6 +175,7 @@ function resetCurrent(changeArray = false,shufflePixels=false) {
   const source = changeArray ? newSource(shufflePixels) : state.page === 'visual' ? engine?.initial || newSource() : compareEngines[0]?.initial || newSource();
   if (state.page === 'visual') { engine = new SortEngine(state.algo, source); showAlgoLimit(engine); }
   if (state.page === 'compare') { const sharedData = commonCompareData(source); compareEngines = state.compareIds.map(id => new SortEngine(id,sharedData)); showCompareLimits(source); }
+  if(state.style==='image')refreshVisualViews();
   setPlayIcon(); updateStats();
 }
 function togglePlay() {
