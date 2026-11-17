@@ -1,0 +1,3 @@
+export const PALETTES = Object.freeze({rainbow:[[53,104,233],[54,188,213],[235,215,93],[241,107,94]],blue:[[185,215,255],[92,155,247],[32,79,191]],purple:[[117,112,239],[194,103,221],[247,118,168]]});
+export const PALETTE_LABELS = Object.freeze({rainbow:'레인보우',blue:'블루',purple:'퍼플'});
+export function colorForValue(value,min,max,palette='rainbow'){const colors=PALETTES[palette]||PALETTES.rainbow;const ratio=max>min?Math.max(0,Math.min(1,(value-min)/(max-min))):.5;const x=ratio*(colors.length-1),i=Math.min(colors.length-2,Math.floor(x)),t=x-i;return 'rgb('+colors[i].map((v,c)=>Math.round(v+(colors[i+1][c]-v)*t)).join(',')+')';}
