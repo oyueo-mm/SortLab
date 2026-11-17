@@ -8,6 +8,8 @@ import { settingsMarkup } from './settings-ui.js';
 import { SortAudio } from './audio.js';
 import { icon } from './icons.js';
 import { algorithmDescriptions } from './descriptions.js';
+import { CATEGORY_TITLES, groupCatalogAlgorithms, getGuideEntry } from './catalog.js';
+import { guideIndexMarkup, guideArticleMarkup } from './guide-ui.js';
 import { CATALOG_CATEGORIES, LIBRARY_DEFAULT_SPEED, LIBRARY_SPEEDS, LIBRARY_COMPLETE_HOLD_MS, libraryInputSize, libraryEventsPerSecond, filterLibraryAlgorithms, algorithmsInCollection, isExperimentalSort, advanceLibraryCard } from './library.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -16,7 +18,7 @@ const sidebarMedia = window.matchMedia('(min-width: 621px)');
 const initial = { page: 'home', algo: 'quickHoare', pattern: 'random', count: 100, speed: 82, style: 'bars', palette: 'rainbow', imageMode: 'strips', imageCount: 128, imageTheme: 'lake', imageMetric: 'brightness', soundOn: true, volume: 70, soundStyle: 'retro', sidebar: sidebarMedia.matches };
 let cached = {};
 try { cached = JSON.parse(localStorage.getItem('sortlab:prefs') || '{}') || {}; } catch { /* private browsing */ }
-const state = { ...initial, ...cached, page: 'home', sidebar: sidebarMedia.matches, settings: false, picker: false, pickerCategory: '전체', pickerQuery: '', pickerTarget: 'main', librarySelected: 'quickHoare', libraryQuery: '', experimentQuery: '', libraryCategory: '전체', librarySpeed: LIBRARY_SPEEDS.includes(Number(cached.librarySpeed)) ? Number(cached.librarySpeed) : LIBRARY_DEFAULT_SPEED, librarySortMode: ['learning','name','complexity'].includes(cached.librarySortMode)?cached.librarySortMode:'learning', libraryPanel: '', compareIds: ['bubble', 'quickHoare', 'merge', 'heap'], compareSoundIndex: 1, playing: false, focus: false };
+const state = { ...initial, ...cached, page: 'home', sidebar: sidebarMedia.matches, settings: false, picker: false, pickerCategory: '전체', pickerQuery: '', pickerTarget: 'main', librarySelected: 'quickHoare', libraryQuery: '', experimentQuery: '', libraryCategory: '전체', librarySpeed: LIBRARY_SPEEDS.includes(Number(cached.librarySpeed)) ? Number(cached.librarySpeed) : LIBRARY_DEFAULT_SPEED, librarySortMode: ['learning','name','complexity'].includes(cached.librarySortMode)?cached.librarySortMode:'learning', libraryPanel: '', guideSelected: 'bubble', guideQuery: '', compareIds: ['bubble', 'quickHoare', 'merge', 'heap'], compareSoundIndex: 1, playing: false, focus: false };
 state.count = Math.max(5,Math.min(10000,Number.isFinite(Number(state.count))?Math.round(Number(state.count)):100));
 if(!['bars','dots','circle','image'].includes(state.style))state.style='bars';
 if(!PALETTE_LABELS[state.palette])state.palette='rainbow';
@@ -31,6 +33,7 @@ sound.volume = state.volume / 100;
 sound.style = state.soundStyle;
 let engine = null, engineView = null, compareEngines = [], compareViews = [], miniEngines = [], libraryCards = [], libraryObserver = null, libraryDetail = null, libraryDetailFocus = null;
 let lastFrame = 0, opAccumulator = 0, toastTimeout = null, focusTimeout = null;
+let guideEngine=null, guideView=null, guidePlaying=false, guideAccumulator=0, guideLastDraw=0;
 const categories = ['전체', ...CATALOG_CATEGORIES];
 const SIZE_PRESETS = [100,500,1000,2000,5000,10000];
 const standardAlgorithms = algorithmsInCollection(algorithms);
@@ -52,7 +55,7 @@ function renderShell() {
   app.innerHTML = `<div class="app${state.sidebar ? ' expanded' : ''}" id="layout"><aside class="rail" aria-label="탐색 메뉴">
     <div class="brand"><span class="brand-text">SortLab</span>${ebutton('sidebar', 'panel', '메뉴 열기 또는 닫기', 'rail-btn')}</div>
     <nav class="nav-list" aria-label="메인 메뉴">${[
-      ['home', 'home', '홈'], ['library', 'book', '도감'], ['visual', 'bars', '시각화'], ['compare', 'compare', '비교']
+      ['home', 'home', '홈'], ['library', 'book', '도감'], ['guide', 'guide', '알고리즘 해설'], ['visual', 'bars', '시각화'], ['compare', 'compare', '비교']
     ].map(([id, glyph, label]) => `<button type="button" data-action="nav" data-page="${id}" class="rail-btn nav${state.page===id?' active':''}" title="${label}" aria-label="${label}" ${state.page===id?'aria-current="page"':''}>${icon(glyph)}<span class="nav-name">${label}</span></button>`).join('')}<div class="nav-separator" aria-hidden="true"></div><button type="button" data-action="nav" data-page="experiment" class="rail-btn nav${state.page==='experiment'?' active':''}" title="패러디·실험" aria-label="패러디·실험 (일반 정렬과 별도)" ${state.page==='experiment'?'aria-current="page"':''}>${icon('sparkles')}<span class="nav-name">패러디·실험</span></button></nav>
     <div class="rail-bottom"><a class="rail-btn nav" href="https://github.com/oyueo-mm/SortLab" target="_blank" rel="noopener noreferrer" title="GitHub" aria-label="GitHub">${icon('github')}<span class="nav-name">GitHub</span></a><button class="rail-btn nav" data-action="settings-nav" title="설정" aria-label="설정">${icon('settings')}<span class="nav-name">설정</span></button></div>
   </aside><main class="workspace" id="workspace"><button class="icon-btn mobile-menu" data-action="sidebar" aria-label="메뉴">${icon('panel')}</button><div id="screen"></div></main></div><div id="modal-root"></div><div class="toast" id="toast" role="status" aria-live="polite"></div>`;
@@ -72,7 +75,7 @@ function renderPage() {
   app.classList.remove('focus','reveal');
   opAccumulator = 0;
   if (libraryObserver) libraryObserver.disconnect(); libraryObserver = null; libraryCards = []; libraryDetail = null; state.libraryPanel = ''; state.picker = false; $('#modal-root')?.replaceChildren();
-  engine = null; engineView = null; compareEngines = []; compareViews = []; miniEngines = [];
+  engine = null; engineView = null; compareEngines = []; compareViews = []; miniEngines = []; guideEngine=null;guideView=null;guidePlaying=false;guideAccumulator=0;
   const el = $('#screen');
   if (!el) return;
   if (state.page === 'home') {
@@ -92,9 +95,12 @@ function renderPage() {
     compareEngines = state.compareIds.map(id => new SortEngine(id,sharedData));
     compareViews = compareEngines.map((e,i)=>{ const canvas=$('#compare-'+i);canvas.dataset.initialKeyHash=e.initial.reduce((h,v)=>(Math.imul(h ^ v,16777619)>>>0),2166136261).toString(16);return makeView(canvas,true); });
     showCompareLimits(data);
+  } else if (state.page === 'guide') {
+    el.innerHTML = `<section class="screen guide-screen"><div class="guide-layout"><aside class="guide-index" aria-label="알고리즘 목차"><div class="guide-index-top"><h1>알고리즘 해설</h1><label class="guide-search">${icon('search',16)}<input id="guide-query" type="search" placeholder="알고리즘 검색" aria-label="해설 검색" autocomplete="off" value="${escapeHtml(state.guideQuery)}" /></label></div><nav class="guide-index-list" id="guide-index-list" aria-label="알고리즘 선택"></nav></aside><article class="guide-article" id="guide-article" aria-live="polite"></article></div></section>`;
+    renderGuideIndex();renderGuideArticle();
   } else if (state.page === 'library' || state.page === 'experiment') {
     const experimental = state.page === 'experiment';
-    el.innerHTML = `<section class="screen library-screen gallery-screen${experimental?' experiment-screen':''}">${experimental?'<div class="experiment-intro"><strong>패러디·실험</strong><span>일반 정렬과 다릅니다. 값을 삭제·변경하거나 정렬을 완료하지 못할 수 있어요.</span></div>':''}<div class="gallery-toolbar"><label class="gallery-search">${icon('search',16)}<input id="library-query" type="search" placeholder="검색" aria-label="${experimental?'패러디 실험':'정렬 알고리즘'} 검색" autocomplete="off" value="${escapeHtml(experimental?state.experimentQuery:state.libraryQuery)}" /></label><span id="gallery-count" class="gallery-count" aria-live="polite">${experimental?experimentAlgorithms.length:standardAlgorithms.length}</span>${experimental?'':ebutton('library-filter','filter','정렬 종류 필터','icon-btn gallery-tool')}${experimental?'':ebutton('library-order','bars','도감 정렬 순서','icon-btn gallery-tool')}${ebutton('library-settings','settings','미리보기 속도','icon-btn gallery-tool')}</div><div id="gallery-panel" class="gallery-panel" hidden></div><div class="gallery-grid" id="library-items"></div></section>`;
+    el.innerHTML = `<section class="screen library-screen gallery-screen${experimental?' experiment-screen':''}">${experimental?'<div class="experiment-intro"><strong>패러디·실험</strong><span>일반 정렬과 다릅니다. 값을 삭제·변경하거나 정렬을 완료하지 못할 수 있어요.</span></div>':''}<div class="gallery-toolbar"><label class="gallery-search">${icon('search',16)}<input id="library-query" type="search" placeholder="검색" aria-label="${experimental?'패러디 실험':'정렬 알고리즘'} 검색" autocomplete="off" value="${escapeHtml(experimental?state.experimentQuery:state.libraryQuery)}" /></label><span id="gallery-count" class="gallery-count" aria-live="polite">${experimental?experimentAlgorithms.length:standardAlgorithms.length}</span>${experimental?'':ebutton('library-filter','filter','정렬 종류 필터','icon-btn gallery-tool')}${experimental?'':ebutton('library-order','bars','도감 정렬 순서','icon-btn gallery-tool')}${ebutton('library-settings','settings','미리보기 속도','icon-btn gallery-tool')}</div><div id="gallery-panel" class="gallery-panel" hidden></div><div class="${experimental?'gallery-grid':'gallery-catalog'}" id="library-items"></div></section>`;
     renderLibraryGallery();
   }
   document.querySelectorAll('.rail-btn.nav[data-page]').forEach(btn => { btn.classList.toggle('active',btn.dataset.page===state.page); btn.toggleAttribute('aria-current',btn.dataset.page===state.page); });
@@ -120,25 +126,30 @@ function renderLibraryGallery() {
   if (libraryObserver) libraryObserver.disconnect(); libraryObserver = null;
   const experimental=state.page==='experiment';const items = filterLibraryAlgorithms(algorithms, experimental?state.experimentQuery:state.libraryQuery, experimental?'전체':state.libraryCategory, experimental?'experiment':'standard',state.librarySortMode);
   const count = $('#gallery-count'); if (count) count.textContent = items.length;
-  root.innerHTML = items.length ? items.map(libraryCardMarkup).join('') : `<div class="gallery-empty">검색 결과가 없습니다.</div>`;
+  root.innerHTML = items.length ? (experimental?items.map(libraryCardMarkup).join(''):groupCatalogAlgorithms(items).map(group=>`<section class="gallery-chapter" id="catalog-${escapeHtml(group.category)}" data-category="${escapeHtml(group.category)}"><div class="gallery-chapter-head"><h2>${escapeHtml(group.title)}</h2><span aria-hidden="true" class="gallery-chapter-rule"></span></div><div class="gallery-grid">${group.items.map(libraryCardMarkup).join('')}</div></section>`).join('')) : `<div class="gallery-empty">검색 결과가 없습니다.</div>`;
   const start = performance.now();
   libraryCards = items.map((a,i) => { const node = root.querySelector(`[data-id="${a.id}"]`), canvas = node.querySelector('canvas'); return { id:a.id, node, engine:new SortEngine(a.id, generateData(libraryInputSize(a), 'random')), view:new BarView(canvas,{compact:true,palette:state.palette}), visible:false, accumulator:0, nextStart:start+(i%7)*110, lastDraw:0 }; });
   if ('IntersectionObserver' in window) { libraryObserver = new IntersectionObserver((entries) => { for (const entry of entries) { const card = libraryCards.find(c=>c.node===entry.target); if(card) card.visible=entry.isIntersecting; } }, {root:$('#workspace'),rootMargin:'60px 0px 60px 0px',threshold:0}); libraryCards.forEach(c=>libraryObserver.observe(c.node)); }
   else libraryCards.forEach(c=>{c.visible=true;});
 }
+function renderGuideIndex() {const root=$('#guide-index-list');if(!root)return;root.innerHTML=guideIndexMarkup(standardAlgorithms,state.guideSelected,state.guideQuery);}
+function renderGuideArticle() {const host=$('#guide-article');if(!host)return;const entry=getGuideEntry(state.guideSelected,algorithmById,algorithmDescriptions,standardAlgorithms)||getGuideEntry('bubble',algorithmById,algorithmDescriptions,standardAlgorithms);state.guideSelected=entry.algo.id;host.innerHTML=guideArticleMarkup(entry);guideEngine=new SortEngine(entry.algo.id,generateData(libraryInputSize(entry.algo),'random'));guideView=new BarView($('#guide-canvas'),{palette:state.palette});guidePlaying=true;guideAccumulator=0;guideLastDraw=0;guideView.draw(guideEngine.values);updateGuidePlayIcon();}
+function updateGuidePlayIcon() {const btn=$('#guide-play');if(btn){btn.innerHTML=icon(guidePlaying?'pause':'play',19);btn.title=guidePlaying?'일시정지':'재생';btn.setAttribute('aria-label',btn.title);}}
+function resetGuide(fresh=false) {if(!guideEngine)return;const seed=fresh?generateData(libraryInputSize(algorithmById[state.guideSelected]),'random'):guideEngine.initial;guideEngine=new SortEngine(state.guideSelected,seed);guideAccumulator=0;guidePlaying=true;guideLastDraw=0;guideView?.draw(guideEngine.values,{now:performance.now()});updateGuidePlayIcon();}
+function updateGuideFrame(dt,now) {if(!guideEngine||!guideView)return;if(guidePlaying){if(!guideEngine.completed)guideAccumulator=advanceLibraryCard(guideEngine,guideAccumulator,dt,2);if(guideEngine.completed){guidePlaying=false;updateGuidePlayIcon();}}if(now-guideLastDraw>=25||!guideLastDraw){guideView.draw(guideEngine.values,{highlight:guideEngine.highlight,completed:guideEngine.completed&&!guideEngine.failed,finishedAt:guideEngine.finishedAt,now,altered:!!guideEngine.algorithm.altersInput});guideLastDraw=now;}}
 function renderLibraryPanel() {
   const el=$('#gallery-panel'); if(!el)return;
   el.hidden=!state.libraryPanel;
   if(state.libraryPanel==='order')el.innerHTML=`<div class="gallery-panel-title">순서</div><div class="gallery-options">${[['learning','학습 순서'],['name','이름순'],['complexity','복잡도순']].map(([id,label])=>`<button type="button" class="gallery-option ${state.librarySortMode===id?'active':''}" data-action="library-order-select" data-value="${id}" aria-pressed="${state.librarySortMode===id}">${label}</button>`).join('')}</div>`;
   if(state.libraryPanel==='speed')el.innerHTML=`<div class="gallery-panel-title">속도</div><div class="gallery-options">${LIBRARY_SPEEDS.map(n=>`<button type="button" class="gallery-option ${n===state.librarySpeed?'active':''}" data-action="library-speed-select" data-value="${n}" aria-pressed="${n===state.librarySpeed}">${n}×</button>`).join('')}</div>`;
-  if(state.libraryPanel==='filter')el.innerHTML=`<div class="gallery-panel-title">분류</div><div class="gallery-options">${categories.map(c=>`<button type="button" class="gallery-option ${c===state.libraryCategory?'active':''}" data-action="library-category" data-value="${c}" aria-pressed="${c===state.libraryCategory}">${c}</button>`).join('')}</div>`;
+  if(state.libraryPanel==='filter')el.innerHTML=`<div class="gallery-panel-title">분류 이동</div><div class="gallery-options">${CATALOG_CATEGORIES.map(c=>`<button type="button" class="gallery-option" data-action="library-jump" data-value="${c}">${escapeHtml(CATEGORY_TITLES[c])}</button>`).join('')}</div><div class="gallery-panel-title gallery-filter-secondary">목록 필터</div><div class="gallery-options">${categories.map(c=>`<button type="button" class="gallery-option ${c===state.libraryCategory?'active':''}" data-action="library-category" data-value="${c}" aria-pressed="${c===state.libraryCategory}">${c}</button>`).join('')}</div>`;
 }
 function openLibraryDetail(id) {
   const a=algorithmById[id]; if(!a || !['library','experiment'].includes(state.page) || isExperimentalSort(a)!==(state.page==='experiment'))return;
   libraryDetailFocus=document.activeElement; state.librarySelected=id;
   const current=libraryCards.find(c=>c.id===id); const seed=current ? current.engine.initial : generateData(libraryInputSize(a),'random'); const desc=algorithmDescriptions[a.id]; const resultType=a.altersInput?'원본 값 변경':a.mayNotFinish?'완료 보장 없음':a.category==='패러디'?'원본 보존 · 정렬 완료':'원본 값 보존';
   libraryDetail={id,engine:new SortEngine(id,seed),view:null,playing:true,accumulator:0,lastDraw:0};
-  $('#modal-root').innerHTML=`<div class="overlay library-overlay" data-action="library-close"><section class="gallery-detail-modal" role="dialog" aria-modal="true" aria-labelledby="gallery-detail-title"><div class="gallery-detail-head"><div><h2 id="gallery-detail-title">${escapeHtml(a.name)}</h2><span class="gallery-detail-en">${escapeHtml(a.en)}</span></div>${ebutton('library-close','close','상세 닫기')}</div><div class="gallery-detail-stage"><canvas id="gallery-detail-canvas" role="img" aria-label="${escapeHtml(a.name)} 정렬 미리보기"></canvas></div>${a.category==='패러디'?'<div class="experiment-warning">패러디·실험 — 일반 도감과 분리된 실험 항목입니다.</div>':''}<div class="gallery-detail-explain">${escapeHtml(desc.summary)}<span>${escapeHtml(desc.detail)}</span></div><div class="gallery-detail-controls">${ebutton('library-detail-reset','reset','다시 정렬')}${ebutton('library-detail-play','pause','일시정지','icon-btn gallery-detail-play','id="gallery-detail-play"')}${ebutton('library-detail-step','step-forward','한 단계 진행')}${ebutton('library-detail-new','shuffle','새 배열')}</div><div class="gallery-detail-facts"><div><span>평균</span><strong>${escapeHtml(a.avg)}</strong></div><div><span>공간</span><strong>${escapeHtml(a.space)}</strong></div><div><span>유형</span><strong>${escapeHtml(a.category==='패러디'?'패러디·실험':a.category)}</strong></div><div><span>${a.category==='패러디'?'결과':'안정성'}</span><strong>${a.category==='패러디'?resultType:a.stable?'안정':'비안정'}</strong></div></div>${a.category==='패러디'?'':`<button type="button" class="gallery-open" data-action="library-open">시각화로 이동 ${icon('arrow',16)}</button>`}</section></div>`;
+  $('#modal-root').innerHTML=`<div class="overlay library-overlay" data-action="library-close"><section class="gallery-detail-modal" role="dialog" aria-modal="true" aria-labelledby="gallery-detail-title"><div class="gallery-detail-head"><div><h2 id="gallery-detail-title">${escapeHtml(a.name)}</h2><span class="gallery-detail-en">${escapeHtml(a.en)}</span></div>${ebutton('library-close','close','상세 닫기')}</div><div class="gallery-detail-stage"><canvas id="gallery-detail-canvas" role="img" aria-label="${escapeHtml(a.name)} 정렬 미리보기"></canvas></div>${a.category==='패러디'?'<div class="experiment-warning">패러디·실험 — 일반 도감과 분리된 실험 항목입니다.</div>':''}${a.category==='패러디'?`<div class="gallery-detail-explain">${escapeHtml(desc.summary)}<span>${escapeHtml(desc.detail)}</span></div>`:''}<div class="gallery-detail-controls">${ebutton('library-detail-reset','reset','다시 정렬')}${ebutton('library-detail-play','pause','일시정지','icon-btn gallery-detail-play','id="gallery-detail-play"')}${ebutton('library-detail-step','step-forward','한 단계 진행')}${ebutton('library-detail-new','shuffle','새 배열')}</div>${a.category==='패러디'?`<div class="gallery-detail-facts"><div><span>평균</span><strong>${escapeHtml(a.avg)}</strong></div><div><span>공간</span><strong>${escapeHtml(a.space)}</strong></div><div><span>유형</span><strong>패러디·실험</strong></div><div><span>결과</span><strong>${escapeHtml(resultType)}</strong></div></div>`:''}${a.category==='패러디'?'':`<div class="gallery-detail-links"><button type="button" class="gallery-guide-link" data-action="library-guide">해설 보기 ${icon('arrow',15)}</button><button type="button" class="gallery-open" data-action="library-open">시각화로 이동 ${icon('arrow',16)}</button></div>`}</section></div>`;
   libraryDetail.view=new BarView($('#gallery-detail-canvas'),{palette:state.palette});
   $('#modal-root [data-action="library-close"]:not(.overlay)')?.focus();
 }
@@ -168,7 +179,7 @@ function renderPickerItems() {
   const filtered = standardAlgorithms.filter(a=>(state.pickerCategory==='전체'||a.category===state.pickerCategory)&&`${a.name} ${a.en}`.toLowerCase().includes(state.pickerQuery.toLowerCase().trim()));
   items.innerHTML = filtered.length ? filtered.map(a=>`<button class="picker-item" data-action="picker-select" data-id="${a.id}"><span class="picker-item-name"><strong>${escapeHtml(a.name)}</strong><span>${escapeHtml(a.en)}</span></span><small>${escapeHtml(a.avg)}</small></button>`).join('') : '<div class="empty-text">결과가 없습니다.</div>';
 }
-function navigation(page) { if (!['home','visual','compare','library','experiment'].includes(page)) return; state.page = page; if (!sidebarMedia.matches) { state.sidebar = false; $('#layout').classList.remove('expanded'); } renderPage(); }
+function navigation(page) { if (!['home','visual','compare','library','guide','experiment'].includes(page)) return; state.page = page; if (!sidebarMedia.matches) { state.sidebar = false; $('#layout').classList.remove('expanded'); } renderPage(); }
 function resetCurrent(changeArray = false,shufflePixels=false) {
   state.playing = false;
   opAccumulator = 0;
@@ -230,9 +241,18 @@ function actionHandler(event) {
   if (action==='image-metric') {if(!PIXEL_METRICS[value])return;state.imageMetric=value;persist();refreshVisualViews();resetCurrent(true);renderSettings();return;}
   if (action==='sound-style') { state.soundStyle=value; sound.style=value; persist(); renderSettings(); return; }
   if (action==='focus') { if (state.page!=='visual') return; state.focus=!state.focus; app.classList.toggle('focus',state.focus); app.classList.toggle('reveal',state.focus); if (state.focus) revealFocus(); else app.classList.remove('reveal'); return; }
-  if (action==='details') { const a=algorithmById[state.algo]; state.playing=false; setPlayIcon(); navigation('library'); openLibraryDetail(a.id); return; }
+  if (action==='details') {state.guideSelected=state.algo;navigation('guide');return;}
   if (action==='compare-sound') { state.compareSoundIndex=Number(button.dataset.index); document.querySelectorAll('[data-action="compare-sound"]').forEach(el=>{ const selected=Number(el.dataset.index)===state.compareSoundIndex; el.classList.toggle('selected',selected); el.innerHTML=icon(selected?'sound':'dots'); }); return; }
+  if (action==='guide-select'||action==='guide-related') { const id=button.dataset.id;if(!getGuideEntry(id,algorithmById,algorithmDescriptions,standardAlgorithms))return;const menuScroll=$('#guide-index-list')?.scrollTop||0;state.guideSelected=id;renderGuideIndex();if($('#guide-index-list'))$('#guide-index-list').scrollTop=menuScroll;renderGuideArticle();const article=$('#guide-article');if(article)article.scrollTop=0;return; }
+  if (action==='guide-play') {if(!guideEngine)return;if(guideEngine.completed)resetGuide(true);else guidePlaying=!guidePlaying;updateGuidePlayIcon();return;}
+  if (action==='guide-reset')return resetGuide(false);
+  if (action==='guide-new')return resetGuide(true);
+  if (action==='guide-step') {if(!guideEngine)return;guidePlaying=false;guideEngine.stepForward();updateGuidePlayIcon();return;}
+  if (action==='guide-back') {if(!guideEngine)return;guidePlaying=false;guideEngine.stepBack();updateGuidePlayIcon();return;}
+  if (action==='guide-visual') {state.algo=state.guideSelected;persist();navigation('visual');return;}
   if (action==='library-select') return openLibraryDetail(button.dataset.id);
+  if (action==='library-guide') {state.guideSelected=state.librarySelected;closeLibraryDetail();navigation('guide');return;}
+  if (action==='library-jump') {if(state.libraryCategory!=='전체'){state.libraryCategory='전체';renderLibraryGallery();}state.libraryPanel='';renderLibraryPanel();const section=document.querySelector(`[data-category="${value}"]`);section?.scrollIntoView({behavior:'smooth',block:'start'});return;}
   if (action==='library-close') { if(button.classList.contains('overlay')&&event.target!==button)return; return closeLibraryDetail(); }
   if (action==='library-open') { if(!algorithmById[state.librarySelected] || isExperimentalSort(algorithmById[state.librarySelected]))return; state.algo=state.librarySelected; persist(); navigation('visual'); return; }
   if (action==='library-settings' || action==='library-filter' || action==='library-order') {const panel=action==='library-settings'?'speed':action==='library-order'?'order':'filter';state.libraryPanel=state.libraryPanel===panel?'':panel;renderLibraryPanel();return;}
@@ -249,6 +269,7 @@ function actionHandler(event) {
 document.addEventListener('click',actionHandler);
 document.addEventListener('input', (event)=>{
   if (event.target.id==='picker-query') { state.pickerQuery=event.target.value; renderPickerItems(); }
+  if (event.target.id==='guide-query'){state.guideQuery=event.target.value;renderGuideIndex();}
   if (event.target.id==='library-query') { if(state.page==='experiment')state.experimentQuery=event.target.value;else state.libraryQuery=event.target.value; renderLibraryGallery(); }
   const key=event.target.dataset.setting;
   if (key==='speed') { state.speed=Number(event.target.value); const label=$('#speed-label'); if(label) label.textContent=state.speed+'×'; persist(); }
@@ -300,6 +321,7 @@ function renderFrame(now) {
       m.view.draw(m.engine.values,{highlight:m.engine.highlight,completed:m.engine.completed,finishedAt:m.engine.finishedAt,now,altered:!!m.engine.algorithm.altersInput});
     });
     if(state.page==='library'||state.page==='experiment')updateLibraryFrames(dt,now);
+    if(state.page==='guide')updateGuideFrame(dt,now);
   }
   requestAnimationFrame(renderFrame);
 }

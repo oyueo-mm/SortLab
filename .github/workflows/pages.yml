@@ -18,7 +18,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: node --check src/main.js && node --check src/guide-ui.js && node --check src/catalog.js && node --check src/guide-notes.js
       - run: npm test
+      - name: Browser smoke tests
+        run: node tests/browser-smoke.mjs
   build:
     needs: test
     runs-on: ubuntu-latest
