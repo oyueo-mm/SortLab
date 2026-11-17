@@ -3,6 +3,7 @@ const paths = {
   'home':'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/><path d="M9 21v-8h6v8"/>',
   'bars':'<path d="M4 20V12M9 20V7M14 20V4M19 20V10"/>',
   'compare':'<rect x="2" y="3" width="9" height="18" rx="1.5"/><rect x="13" y="3" width="9" height="18" rx="1.5"/>',
+  'guide':'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',
   'book':'<path d="M12 7c-3-2-6-2-10-2v15c4 0 7 0 10 2 3-2 6-2 10-2V5c-4 0-7 0-10 2Zm0 0v15"/>',
   'settings':'<path d="M4 7h16M4 17h16M8 4v6M16 14v6"/>',
   'volume':'<path d="M11 5 6 9H3v6h3l5 4V5ZM15 9a5 5 0 0 1 0 6M18 6a9 9 0 0 1 0 12"/>',
