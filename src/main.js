@@ -4,6 +4,7 @@ import { SortEngine, speedToEventsPerSecond } from './engine.js';
 import { BarView } from './visual.js';
 import { PALETTE_LABELS } from './palette.js';
 import { SortImageAsset, ImageSortView, IMAGE_MODES, IMAGE_PIECES, IMAGE_THEMES, PIXEL_METRICS, imageCountFor, imageInputFor } from './image-sort.js';
+import { settingsMarkup } from './settings-ui.js';
 import { SortAudio } from './audio.js';
 import { icon } from './icons.js';
 import { algorithmDescriptions } from './descriptions.js';
@@ -153,20 +154,7 @@ function updateLibraryFrames(dt,now) {
   }
   if(libraryDetail){const d=libraryDetail;if(d.playing){if(d.engine.completed){d.playing=false;updateLibraryDetailPlay();}else{d.accumulator=advanceLibraryCard(d.engine,d.accumulator,dt,state.librarySpeed);if(d.engine.completed){d.playing=false;updateLibraryDetailPlay();}}}if(now-d.lastDraw>=20||!d.lastDraw){d.view.draw(d.engine.values,{highlight:d.engine.highlight,completed:d.engine.completed&&!d.engine.failed,finishedAt:d.engine.finishedAt,now,altered:!!algorithmById[d.id]?.altersInput});d.lastDraw=now;}}
 }
-function renderSettings() {
-  const host = $('#settings-host'); if (!host) return;
-  if (!state.settings) { host.innerHTML = ''; return; }
-  const patternButtons = patterns.map(p=>`<button class="choice ${state.pattern===p.id?'active':''}" data-action="pattern" data-value="${p.id}">${p.name}</button>`).join('');
-  host.innerHTML = `<div class="settings-panel" role="dialog" aria-label="정렬 설정"><div class="setting-row"><span class="setting-label">설정</span>${ebutton('settings','close','닫기')}</div>
-   <div class="setting-section"><div class="setting-row"><label class="setting-label" for="count-range">배열</label><input class="setting-value size-number" id="count-number" data-setting="count-number" type="number" min="5" max="10000" step="1" value="${state.count}" aria-label="배열 크기 직접 입력" /></div><input class="setting-range" data-setting="count" id="count-range" type="range" min="5" max="10000" step="1" value="${state.count}" aria-label="배열 크기" /><div class="size-presets">${SIZE_PRESETS.map(n=>`<button type="button" class="size-preset ${state.count===n?'active':''}" data-action="count-preset" data-value="${n}">${n.toLocaleString('ko-KR')}</button>`).join('')}</div></div>
-   <div class="setting-section"><div class="setting-row"><label class="setting-label" for="speed-range">속도</label><span class="setting-value" id="speed-label">${state.speed}×</span></div><input class="setting-range" data-setting="speed" id="speed-range" type="range" min="1" max="200" step="1" value="${state.speed}" aria-label="정렬 속도" /></div>
-   <div class="setting-section"><span class="setting-label">배열 형태</span><div class="button-group">${patternButtons}</div></div>
-   ${state.page === 'visual' ? `<div class="setting-section"><span class="setting-label">표현</span><div class="button-group">${[['bars','막대'],['dots','점'],['circle','원형']].map(([id,name])=>`<button class="choice ${state.style===id?'active':''}" data-action="style" data-value="${id}">${name}</button>`).join('')}</div></div>`:''}
-   <hr class="setting-line"/>
-   <div class="setting-row"><span class="setting-label">사운드</span><button class="toggle ${state.soundOn?'on':''}" role="switch" aria-checked="${state.soundOn}" data-action="sound" aria-label="사운드 켜기 또는 끄기"></button></div>
-   <div class="setting-section"><div class="setting-row"><label class="setting-label" for="volume-range">볼륨</label><span class="setting-value" id="volume-label">${state.volume}%</span></div><input class="setting-range" data-setting="volume" id="volume-range" type="range" min="0" max="100" step="1" value="${state.volume}" /></div>
-   <div class="setting-section"><span class="setting-label">음색</span><div class="button-group">${[['retro','레트로'],['soft','부드러운'],['click','기계음'],['synth','신시사이저']].map(([id,name])=>`<button class="choice ${state.soundStyle===id?'active':''}" data-action="sound-style" data-value="${id}">${name}</button>`).join('')}</div></div></div>`;
-}
+function renderSettings() { const host=$('#settings-host');if(!host)return;if(!state.settings){host.innerHTML='';return;}host.innerHTML=settingsMarkup(state,patterns,SIZE_PRESETS,imageAsset.name);const preview=$('#image-source-preview');if(preview)preview.getContext('2d')?.drawImage(imageAsset.canvas,0,0,preview.width,preview.height); }
 function openPicker(target) {
   state.picker = true; state.pickerTarget = target; state.pickerCategory = '전체'; state.pickerQuery = '';
   $('#modal-root').innerHTML = `<div class="overlay" data-action="close-picker"><div class="picker" role="dialog" aria-modal="true" aria-label="알고리즘 선택"><div class="picker-top">${icon('search')}<input autofocus placeholder="정렬 알고리즘 검색" aria-label="알고리즘 검색" id="picker-query" autocomplete="off" />${ebutton('close-picker','close','닫기')}</div><div class="picker-categories">${ebutton('picker-scroll','chevron','분류 왼쪽으로','icon-btn picker-scroll-left')}<div class="picker-tabs" id="picker-tabs"></div>${ebutton('picker-scroll','chevron','분류 오른쪽으로','icon-btn picker-scroll-right')}</div><div class="picker-items" id="picker-items"></div></div></div>`;
@@ -181,10 +169,10 @@ function renderPickerItems() {
   items.innerHTML = filtered.length ? filtered.map(a=>`<button class="picker-item" data-action="picker-select" data-id="${a.id}"><span class="picker-item-name"><strong>${escapeHtml(a.name)}</strong><span>${escapeHtml(a.en)}</span></span><small>${escapeHtml(a.avg)}</small></button>`).join('') : '<div class="empty-text">결과가 없습니다.</div>';
 }
 function navigation(page) { if (!['home','visual','compare','library','experiment'].includes(page)) return; state.page = page; if (!sidebarMedia.matches) { state.sidebar = false; $('#layout').classList.remove('expanded'); } renderPage(); }
-function resetCurrent(changeArray = false) {
+function resetCurrent(changeArray = false,shufflePixels=false) {
   state.playing = false;
   opAccumulator = 0;
-  const source = changeArray ? newSource(true) : state.page === 'visual' ? engine?.initial || newSource() : compareEngines[0]?.initial || newSource();
+  const source = changeArray ? newSource(shufflePixels) : state.page === 'visual' ? engine?.initial || newSource() : compareEngines[0]?.initial || newSource();
   if (state.page === 'visual') { engine = new SortEngine(state.algo, source); showAlgoLimit(engine); }
   if (state.page === 'compare') { const sharedData = commonCompareData(source); compareEngines = state.compareIds.map(id => new SortEngine(id,sharedData)); showCompareLimits(source); }
   setPlayIcon(); updateStats();
@@ -216,7 +204,8 @@ function actionHandler(event) {
   if (action==='settings-nav') { if (state.page!=='visual'&&state.page!=='compare') navigation('visual'); state.settings = !state.settings; renderSettings(); updateStats(); return; }
   if (action==='picker-main') return openPicker('main');
   if (action==='picker-compare') return openPicker(Number(button.dataset.index));
-  if (action==='picker-category') { state.pickerCategory=value; renderPickerItems(); return; }
+  if (action==='picker-category') { const tabs=$('#picker-tabs'),scroll=tabs?.scrollLeft||0;state.pickerCategory=value;renderPickerItems();if(tabs)tabs.scrollLeft=scroll;return; }
+  if (action==='picker-scroll') { const tabs=$('#picker-tabs');const direction=button.classList.contains('picker-scroll-left')?-1:1;tabs?.scrollBy({left:direction*230,behavior:'smooth'});return; }
   if (action==='picker-select') { const id = button.dataset.id; if(!algorithmById[id] || isExperimentalSort(algorithmById[id]))return; if (state.pickerTarget==='main') { state.algo=id; persist(); closePicker(); renderPage(); } else { state.compareIds[state.pickerTarget]=id; closePicker(); renderPage(); } return; }
   if (action==='close-picker') return closePicker();
   if (action==='play') return togglePlay();
@@ -227,12 +216,17 @@ function actionHandler(event) {
     setPlayIcon(); setMeters(); updateStats(); return;
   }
   if (action==='reset') return resetCurrent(false);
-  if (action==='shuffle') return resetCurrent(true);
+  if (action==='shuffle') return resetCurrent(true,state.style==='image'&&state.imageMode==='pixels');
   if (action==='sound') { state.soundOn=!state.soundOn; sound.setEnabled(state.soundOn); persist(); updateSoundIcon(); if (state.settings) renderSettings(); return; }
   if (action==='settings') { state.settings=!state.settings; renderSettings(); updateStats(); revealFocus(); return; }
   if (action==='count-preset') { state.count=Number(value);persist();renderSettings();resetCurrent(true);return; }
   if (action==='pattern') { state.pattern=value; persist(); renderSettings(); resetCurrent(true); return; }
-  if (action==='style') { state.style=value; if(engineView) engineView.style=value; persist(); renderSettings(); return; }
+  if (action==='style') {if(!['bars','dots','circle','image'].includes(value))return;const switchedImage=(state.style==='image')!==(value==='image');state.style=value;if(value==='image'&&!['random','ascending','descending','nearly'].includes(state.pattern))state.pattern='random';persist();refreshVisualViews();if(switchedImage)resetCurrent(true);renderSettings();return;}
+  if (action==='palette') {if(!PALETTE_LABELS[value])return;state.palette=value;persist();refreshVisualViews();renderSettings();return;}
+  if (action==='image-mode') {if(!IMAGE_MODES[value])return;state.imageMode=value;state.imageCount=imageCountFor(value,value==='strips'?128:value==='tiles'?64:256);persist();refreshVisualViews();resetCurrent(true);renderSettings();return;}
+  if (action==='image-count') {const allowed=IMAGE_PIECES[state.imageMode];const size=Number(value);if(!allowed.includes(size))return;state.imageCount=size;persist();resetCurrent(true);renderSettings();return;}
+  if (action==='image-theme') {if(!IMAGE_THEMES[value])return;state.imageTheme=value;imageAsset=SortImageAsset.sample(value);persist();refreshVisualViews();resetCurrent(true);renderSettings();return;}
+  if (action==='image-metric') {if(!PIXEL_METRICS[value])return;state.imageMetric=value;persist();refreshVisualViews();resetCurrent(true);renderSettings();return;}
   if (action==='sound-style') { state.soundStyle=value; sound.style=value; persist(); renderSettings(); return; }
   if (action==='focus') { if (state.page!=='visual') return; state.focus=!state.focus; app.classList.toggle('focus',state.focus); app.classList.toggle('reveal',state.focus); if (state.focus) revealFocus(); else app.classList.remove('reveal'); return; }
   if (action==='details') { const a=algorithmById[state.algo]; state.playing=false; setPlayIcon(); navigation('library'); openLibraryDetail(a.id); return; }
@@ -260,7 +254,7 @@ document.addEventListener('input', (event)=>{
   if (key==='count') { state.count=Math.max(5,Math.min(10000,Math.round(Number(event.target.value))));const number=$('#count-number');if(number)number.value=state.count;persist(); }
   if (key==='volume') { state.volume=Number(event.target.value); sound.volume=state.volume/100; const label=$('#volume-label'); if(label) label.textContent=state.volume+'%'; persist(); }
 });
-document.addEventListener('change',(event)=>{const key=event.target?.dataset?.setting;if(key==='count'||key==='count-number'){state.count=Math.max(5,Math.min(10000,Math.round(Number(event.target.value)||100)));const slider=$('#count-range'),number=$('#count-number');if(slider)slider.value=state.count;if(number)number.value=state.count;persist();renderSettings();resetCurrent(true);}});
+document.addEventListener('change',(event)=>{if(event.target?.id==='image-upload'){const file=event.target.files?.[0];if(!file)return;if(!/^image\/(png|jpeg|webp|gif)$/.test(file.type)){toast('PNG, JPG, WEBP 또는 GIF 이미지를 선택하세요.');return;}if(file.size>10*1024*1024){toast('이미지 크기는 10MB 이하로 제한됩니다.');return;}const url=URL.createObjectURL(file),img=new Image();img.onload=()=>{URL.revokeObjectURL(url);if(img.naturalWidth*img.naturalHeight>40000000){toast('이미지 해상도는 4,000만 픽셀 이하로 제한됩니다.');return;}try{imageAsset=SortImageAsset.fromImage(img,file.name.slice(0,50));state.imageTheme='upload';persist();refreshVisualViews();resetCurrent(true);renderSettings();toast('이미지를 적용했습니다.');}catch(error){toast('이미지를 처리하지 못했습니다.');}};img.onerror=()=>{URL.revokeObjectURL(url);toast('이미지를 열지 못했습니다.');};img.src=url;return;}const key=event.target?.dataset?.setting;if(key==='count'||key==='count-number'){state.count=Math.max(5,Math.min(10000,Math.round(Number(event.target.value)||100)));const slider=$('#count-range'),number=$('#count-number');if(slider)slider.value=state.count;if(number)number.value=state.count;persist();renderSettings();resetCurrent(true);}});
 document.addEventListener('keydown',(event)=>{
   if (event.key==='Escape') { if (libraryDetail) closeLibraryDetail(); else if(['library','experiment'].includes(state.page)&&state.libraryPanel){state.libraryPanel='';renderLibraryPanel();}else if (state.picker) closePicker(); else if(state.settings){state.settings=false;renderSettings();updateStats();}else if(state.focus){state.focus=false;app.classList.remove('focus','reveal');} else if(state.sidebar){state.sidebar=false;$('#layout').classList.remove('expanded');} return; }
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
@@ -286,7 +280,7 @@ function renderFrame(now) {
         sound.consume(events,Math.max(1,...engine.values));
         if(!wasDone&&engine.completed) { state.playing=false;setPlayIcon();if(engine.failed)toast(engine.error);else sound.complete(); }
       }
-      engineView.draw(engine.values,{highlight:engine.highlight,completed:engine.completed&&!engine.failed,finishedAt:engine.finishedAt,now,altered:!!engine.algorithm.altersInput});
+      engineView.draw(engine.values,{highlight:engine.highlight,completed:engine.completed&&!engine.failed,finishedAt:engine.finishedAt,now,sequence:engine.operations,altered:!!engine.algorithm.altersInput});
       setMeters();updateStats();
     }
     if(state.page==='compare'&&compareEngines.length) {
@@ -296,7 +290,7 @@ function renderFrame(now) {
         compareEngines.forEach((e,i)=>{if(!e.completed) {const wasDone=e.completed, events=e.run(ops,3);if(i===state.compareSoundIndex)sound.consume(events,Math.max(1,...e.values));if(!wasDone&&e.completed&&i===state.compareSoundIndex&&!e.failed)sound.complete();}});
         if(compareEngines.every(e=>e.completed)){state.playing=false;setPlayIcon();const failed=compareEngines.filter(e=>e.failed);if(failed.length)toast(`${failed.length}개의 정렬이 중단되었습니다.`);}
       }
-      compareViews.forEach((view,i)=>view.draw(compareEngines[i].values,{highlight:compareEngines[i].highlight,completed:compareEngines[i].completed&&!compareEngines[i].failed,finishedAt:compareEngines[i].finishedAt,now,altered:!!compareEngines[i].algorithm.altersInput}));
+      compareViews.forEach((view,i)=>view.draw(compareEngines[i].values,{highlight:compareEngines[i].highlight,completed:compareEngines[i].completed&&!compareEngines[i].failed,finishedAt:compareEngines[i].finishedAt,now,sequence:compareEngines[i].operations,altered:!!compareEngines[i].algorithm.altersInput}));
       setMeters();updateStats();
     }
     if(state.page==='home') miniEngines.forEach((m,i)=>{
