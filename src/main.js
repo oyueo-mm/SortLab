@@ -90,7 +90,7 @@ function renderPage() {
     const data = newSource();
     const sharedData = commonCompareData(data);
     compareEngines = state.compareIds.map(id => new SortEngine(id,sharedData));
-    compareViews = compareEngines.map((_,i)=>makeView($('#compare-'+i),true));
+    compareViews = compareEngines.map((e,i)=>{ const canvas=$('#compare-'+i);canvas.dataset.initialKeyHash=e.initial.reduce((h,v)=>(Math.imul(h ^ v,16777619)>>>0),2166136261).toString(16);return makeView(canvas,true); });
     showCompareLimits(data);
   } else if (state.page === 'library' || state.page === 'experiment') {
     const experimental = state.page === 'experiment';
