@@ -15,3 +15,5 @@ jobs:
           node-version: '22'
       - run: node --check src/main.js && node --check src/visual.js && node --check src/image-sort.js && node --check src/settings-ui.js && node --check src/palette.js && node --check src/extra-classic.js && node --check src/extra-advanced.js
       - run: npm test
+      - name: Browser smoke tests
+        run: node tests/browser-smoke.mjs
