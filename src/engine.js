@@ -1,6 +1,7 @@
 import { createSort } from './algorithms.js';
 
 const HISTORY_LIMIT = 150000;
+const HISTORY_TRIM_CHUNK = 4096;
 
 export class SortEngine {
   constructor(id, input) { this.reset(id, input); }
@@ -39,7 +40,7 @@ export class SortEngine {
       if (next.done) { this.doneGenerating = true; this.finish(); return null; }
       entry = { op: next.value, old: (next.value.t === 'w' || next.value.t === 'd') ? this.values[next.value.i] : null };
       this.history.push(entry);
-      if (this.history.length > HISTORY_LIMIT) { this.history.shift(); this.historyStart++; this.position--; }
+      if (this.history.length > HISTORY_LIMIT + HISTORY_TRIM_CHUNK) { this.history.splice(0,HISTORY_TRIM_CHUNK); this.historyStart += HISTORY_TRIM_CHUNK; this.position -= HISTORY_TRIM_CHUNK; }
     }
     this.position++;
     const { op } = entry;

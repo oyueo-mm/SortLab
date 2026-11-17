@@ -1,3 +1,5 @@
+import { extraClassic } from './extra-classic.js';
+import { extraAdvanced } from './extra-advanced.js';
 /**
  * All algorithms are generators of replayable events. Their own private array is
  * the source of truth; the renderer applies swap/write events to its own copy.
@@ -70,46 +72,48 @@ function* quantumBogoDemo(a) { const sorted=[...a].sort((x,y)=>x-y);for(let i=0;
 function* slowSort(a) { function* sort(lo,hi){if(lo>=hi)return;const mid=(lo+hi)>>1;yield* sort(lo,mid);yield* sort(mid+1,hi);yield C(mid,hi);if(a[mid]>a[hi])yield* swap(a,mid,hi);yield* sort(lo,hi-1);}yield* sort(0,a.length-1); }
 
 export const algorithms = [
-  { id:'bubble', name:'버블 정렬', en:'Bubble Sort', category:'기초', avg:'O(n²)', space:'O(1)', stable:true, fn:bubble },
-  { id:'selection', name:'선택 정렬', en:'Selection Sort', category:'기초', avg:'O(n²)', space:'O(1)', stable:false, fn:selection },
-  { id:'insertion', name:'삽입 정렬', en:'Insertion Sort', category:'기초', avg:'O(n²)', space:'O(1)', stable:true, fn:insertion },
-  { id:'binaryInsertion', name:'이진 삽입 정렬', en:'Binary Insertion Sort', category:'기초', avg:'O(n²)', space:'O(1)', stable:true, fn:binaryInsertion },
-  { id:'cocktail', name:'칵테일 정렬', en:'Cocktail Shaker Sort', category:'기초', avg:'O(n²)', space:'O(1)', stable:true, fn:cocktail },
-  { id:'comb', name:'빗 정렬', en:'Comb Sort', category:'기초', avg:'O(n²)', space:'O(1)', stable:false, fn:comb },
-  { id:'gnome', name:'그놈 정렬', en:'Gnome Sort', category:'기초', avg:'O(n²)', space:'O(1)', stable:true, fn:gnome },
-  { id:'oddEven', name:'홀짝 정렬', en:'Odd-Even Sort', category:'기초', avg:'O(n²)', space:'O(1)', stable:true, fn:oddEven },
-  { id:'shell', name:'셸 정렬', en:'Shell Sort', category:'고급', avg:'간격에 따라 다름', space:'O(1)', stable:false, fn:shell },
-  { id:'quickLomuto', name:'퀵 정렬 · Lomuto', en:'Quick Sort · Lomuto', category:'고급', avg:'O(n log n)', space:'O(log n)', stable:false, fn:quickLomuto },
-  { id:'quickHoare', name:'퀵 정렬 · Hoare', en:'Quick Sort · Hoare', category:'고급', avg:'O(n log n)', space:'O(log n)', stable:false, fn:quickHoare },
-  { id:'heap', name:'힙 정렬', en:'Heap Sort', category:'고급', avg:'O(n log n)', space:'O(1)', stable:false, fn:heap },
-  { id:'merge', name:'병합 정렬', en:'Merge Sort', category:'고급', avg:'O(n log n)', space:'O(n)', stable:true, fn:mergeSort },
-  { id:'tree', name:'트리 정렬', en:'Tree Sort', category:'고급', avg:'O(n log n)', space:'O(n)', stable:false, fn:tree },
-  { id:'cycle', name:'사이클 정렬', en:'Cycle Sort', category:'고급', avg:'O(n²)', space:'O(1)', stable:false, fn:cycle },
-  { id:'pancake', name:'팬케이크 정렬', en:'Pancake Sort', category:'고급', avg:'O(n²)', space:'O(1)', stable:false, fn:pancake },
-  { id:'counting', name:'계수 정렬', en:'Counting Sort', category:'분포', avg:'O(n + k)', space:'O(k)', stable:false, fn:counting },
-  { id:'radixLsd', name:'기수 정렬 · LSD', en:'Radix Sort · LSD', category:'분포', avg:'O(d(n + k))', space:'O(n + k)', stable:true, fn:radixLsd },
-  { id:'radixMsd', name:'기수 정렬 · MSD', en:'Radix Sort · MSD', category:'분포', avg:'O(d(n + k))', space:'O(n + k)', stable:true, fn:radixMsd },
-  { id:'bucket', name:'버킷 정렬', en:'Bucket Sort', category:'분포', avg:'평균 O(n + k)', space:'O(n + k)', stable:true, fn:bucket },
-  { id:'pigeonhole', name:'비둘기집 정렬', en:'Pigeonhole Sort', category:'분포', avg:'O(n + k)', space:'O(n + k)', stable:true, fn:pigeonhole },
+  { id:'bubble', name:'버블 정렬', en:'Bubble Sort', category:'기초·교환', avg:'O(n²)', space:'O(1)', stable:true, fn:bubble },
+  { id:'selection', name:'선택 정렬', en:'Selection Sort', category:'기초·교환', avg:'O(n²)', space:'O(1)', stable:false, fn:selection },
+  { id:'insertion', name:'삽입 정렬', en:'Insertion Sort', category:'삽입·간격', avg:'O(n²)', space:'O(1)', stable:true, fn:insertion },
+  { id:'binaryInsertion', name:'이진 삽입 정렬', en:'Binary Insertion Sort', category:'삽입·간격', avg:'O(n²)', space:'O(1)', stable:true, fn:binaryInsertion },
+  { id:'cocktail', name:'칵테일 정렬', en:'Cocktail Shaker Sort', category:'기초·교환', avg:'O(n²)', space:'O(1)', stable:true, fn:cocktail },
+  { id:'comb', name:'빗 정렬', en:'Comb Sort', category:'기초·교환', avg:'O(n²)', space:'O(1)', stable:false, fn:comb },
+  { id:'gnome', name:'그놈 정렬', en:'Gnome Sort', category:'기초·교환', avg:'O(n²)', space:'O(1)', stable:true, fn:gnome },
+  { id:'oddEven', name:'홀짝 정렬', en:'Odd-Even Sort', category:'기초·교환', avg:'O(n²)', space:'O(1)', stable:true, fn:oddEven },
+  { id:'shell', name:'셸 정렬', en:'Shell Sort', category:'삽입·간격', avg:'간격에 따라 다름', space:'O(1)', stable:false, fn:shell },
+  { id:'quickLomuto', name:'퀵 정렬 · Lomuto', en:'Quick Sort · Lomuto', category:'퀵·분할', avg:'O(n log n)', space:'O(log n)', stable:false, fn:quickLomuto },
+  { id:'quickHoare', name:'퀵 정렬 · Hoare', en:'Quick Sort · Hoare', category:'퀵·분할', avg:'O(n log n)', space:'O(log n)', stable:false, fn:quickHoare },
+  { id:'heap', name:'힙 정렬', en:'Heap Sort', category:'힙·트리', avg:'O(n log n)', space:'O(1)', stable:false, fn:heap },
+  { id:'merge', name:'병합 정렬', en:'Merge Sort', category:'병합', avg:'O(n log n)', space:'O(n)', stable:true, fn:mergeSort },
+  { id:'tree', name:'트리 정렬', en:'Tree Sort', category:'힙·트리', avg:'O(n log n)', space:'O(n)', stable:false, fn:tree },
+  { id:'cycle', name:'사이클 정렬', en:'Cycle Sort', category:'이색·비효율', avg:'O(n²)', space:'O(1)', stable:false, fn:cycle },
+  { id:'pancake', name:'팬케이크 정렬', en:'Pancake Sort', category:'이색·비효율', avg:'O(n²)', space:'O(1)', stable:false, fn:pancake },
+  { id:'counting', name:'계수 정렬', en:'Counting Sort', category:'분포·기수', avg:'O(n + k)', space:'O(k)', stable:false, fn:counting },
+  { id:'radixLsd', name:'기수 정렬 · LSD', en:'Radix Sort · LSD', category:'분포·기수', avg:'O(d(n + k))', space:'O(n + k)', stable:true, fn:radixLsd },
+  { id:'radixMsd', name:'기수 정렬 · MSD', en:'Radix Sort · MSD', category:'분포·기수', avg:'O(d(n + k))', space:'O(n + k)', stable:true, fn:radixMsd },
+  { id:'bucket', name:'버킷 정렬', en:'Bucket Sort', category:'분포·기수', avg:'평균 O(n + k)', space:'O(n + k)', stable:true, fn:bucket },
+  { id:'pigeonhole', name:'비둘기집 정렬', en:'Pigeonhole Sort', category:'분포·기수', avg:'O(n + k)', space:'O(n + k)', stable:true, fn:pigeonhole },
   { id:'timsort', name:'팀 정렬', en:'TimSort', category:'하이브리드', avg:'O(n log n)', space:'O(n)', stable:true, fn:timsort },
   { id:'introsort', name:'인트로 정렬', en:'Intro Sort', category:'하이브리드', avg:'O(n log n)', space:'O(log n)', stable:false, fn:introsort },
-  { id:'dualPivotQuick', name:'듀얼 피벗 퀵 정렬', en:'Dual-Pivot Quick Sort', category:'하이브리드', avg:'O(n log n)', space:'O(log n)', stable:false, fn:dualPivotQuick },
-  { id:'bottomUpMerge', name:'상향식 병합 정렬', en:'Bottom-Up Merge Sort', category:'하이브리드', avg:'O(n log n)', space:'O(n)', stable:true, fn:bottomUpMerge },
-  { id:'bitonic', name:'비토닉 정렬', en:'Bitonic Sort', category:'특수', avg:'O(n log² n)', space:'O(log n)', stable:false, fn:bitonic, powerOfTwo:true },
-  { id:'stooge', name:'스투지 정렬', en:'Stooge Sort', category:'특수', avg:'O(n^2.71)', space:'O(log n)', stable:false, fn:stooge, maxSize:64 },
-  { id:'bogo', name:'보고 정렬', en:'Bogo Sort', category:'특수', avg:'O(n·n!)', space:'O(1)', stable:false, fn:bogo, maxSize:5 },
-  { id:'strand', name:'스트랜드 정렬', en:'Strand Sort', category:'특수', avg:'O(n²)', space:'O(n)', stable:true, fn:strand },
+  { id:'dualPivotQuick', name:'듀얼 피벗 퀵 정렬', en:'Dual-Pivot Quick Sort', category:'퀵·분할', avg:'O(n log n)', space:'O(log n)', stable:false, fn:dualPivotQuick },
+  { id:'bottomUpMerge', name:'상향식 병합 정렬', en:'Bottom-Up Merge Sort', category:'병합', avg:'O(n log n)', space:'O(n)', stable:true, fn:bottomUpMerge },
+  { id:'bitonic', name:'비토닉 정렬', en:'Bitonic Sort', category:'정렬 네트워크', avg:'O(n log² n)', space:'O(log n)', stable:false, fn:bitonic, powerOfTwo:true },
+  { id:'stooge', name:'스투지 정렬', en:'Stooge Sort', category:'이색·비효율', avg:'O(n^2.71)', space:'O(log n)', stable:false, fn:stooge, maxSize:64 },
+  { id:'bogo', name:'보고 정렬', en:'Bogo Sort', category:'이색·비효율', avg:'O(n·n!)', space:'O(1)', stable:false, fn:bogo, maxSize:5 },
+  { id:'strand', name:'스트랜드 정렬', en:'Strand Sort', category:'이색·비효율', avg:'O(n²)', space:'O(n)', stable:true, fn:strand },
 
-  { id:'exchange', name:'교환 정렬', en:'Exchange Sort', category:'기초', avg:'O(n²)', space:'O(1)', stable:false, fn:exchangeSort },
-  { id:'doubleSelection', name:'양방향 선택 정렬', en:'Double Selection Sort', category:'기초', avg:'O(n²)', space:'O(1)', stable:false, fn:doubleSelection },
-  { id:'bingo', name:'빙고 정렬', en:'Bingo Sort', category:'기초', avg:'O(n²)', space:'O(1)', stable:false, fn:bingoSort },
-  { id:'circle', name:'원형 정렬', en:'Circle Sort', category:'고급', avg:'O(n log² n)~O(n²)', space:'O(log n)', stable:false, fn:circleSort },
-  { id:'oddEvenMerge', name:'홀짝 병합 네트워크 정렬', en:'Odd-Even Merge Sort', category:'고급', avg:'O(n log² n)', space:'O(log n)', stable:false, fn:oddEvenMergeSort, powerOfTwo:true },
-  { id:'patience', name:'패이션스 정렬', en:'Patience Sort', category:'고급', avg:'이 구현: O(n²)', space:'O(n)', stable:false, fn:patienceSort },
-  { id:'tournament', name:'토너먼트 정렬', en:'Tournament Sort', category:'고급', avg:'O(n log n)', space:'O(n)', stable:false, fn:tournamentSort },
-  { id:'threeWayQuick', name:'3방향 퀵 정렬', en:'Three-Way Quick Sort', category:'고급', avg:'O(n log n)', space:'O(log n)', stable:false, fn:threeWayQuick },
-  { id:'binaryQuick', name:'이진 퀵 정렬', en:'Binary Quick Sort', category:'분포', avg:'O(bn)', space:'O(b)', stable:false, fn:binaryQuick },
+  { id:'exchange', name:'교환 정렬', en:'Exchange Sort', category:'기초·교환', avg:'O(n²)', space:'O(1)', stable:false, fn:exchangeSort },
+  { id:'doubleSelection', name:'양방향 선택 정렬', en:'Double Selection Sort', category:'기초·교환', avg:'O(n²)', space:'O(1)', stable:false, fn:doubleSelection },
+  { id:'bingo', name:'빙고 정렬', en:'Bingo Sort', category:'기초·교환', avg:'O(n²)', space:'O(1)', stable:false, fn:bingoSort },
+  { id:'circle', name:'원형 정렬', en:'Circle Sort', category:'이색·비효율', avg:'O(n log² n)~O(n²)', space:'O(log n)', stable:false, fn:circleSort },
+  { id:'oddEvenMerge', name:'홀짝 병합 네트워크 정렬', en:'Odd-Even Merge Sort', category:'정렬 네트워크', avg:'O(n log² n)', space:'O(log n)', stable:false, fn:oddEvenMergeSort, powerOfTwo:true },
+  { id:'patience', name:'패이션스 정렬', en:'Patience Sort', category:'이색·비효율', avg:'이 구현: O(n²)', space:'O(n)', stable:false, fn:patienceSort },
+  { id:'tournament', name:'토너먼트 정렬', en:'Tournament Sort', category:'힙·트리', avg:'O(n log n)', space:'O(n)', stable:false, fn:tournamentSort },
+  { id:'threeWayQuick', name:'3방향 퀵 정렬', en:'Three-Way Quick Sort', category:'퀵·분할', avg:'O(n log n)', space:'O(log n)', stable:false, fn:threeWayQuick },
+  { id:'binaryQuick', name:'이진 퀵 정렬', en:'Binary Quick Sort', category:'분포·기수', avg:'O(bn)', space:'O(b)', stable:false, fn:binaryQuick },
   { id:'blockInsertion', name:'블록 삽입 병합 정렬', en:'Block Insertion Merge Sort', category:'하이브리드', avg:'O(n log n)', space:'O(n)', stable:true, fn:blockInsertionSort },
+  ...extraClassic,
+  ...extraAdvanced,
   { id:'stalin', name:'스탈린 정렬', en:'Stalin Sort', category:'패러디', avg:'O(n)', space:'O(1)', stable:true, fn:stalinSort, altersInput:true, maxSize:100 },
   { id:'thanos', name:'타노스 정렬', en:'Thanos Sort', category:'패러디', avg:'비교 횟수는 입력에 따라 변동', space:'O(n)', stable:false, fn:thanosSort, altersInput:true, maxSize:100 },
   { id:'socialism', name:'사회주의 정렬', en:'Socialism Sort (SortLab parody)', category:'패러디', avg:'O(n)', space:'O(1)', stable:false, fn:socialismSort, altersInput:true, customParody:true },
@@ -119,9 +123,11 @@ export const algorithms = [
   { id:'miracle', name:'기적 정렬', en:'Miracle Sort', category:'패러디', avg:'실행 종료 보장 없음', space:'O(1)', stable:false, fn:miracleSort, mayNotFinish:true, maxSize:48 },
   { id:'quantumBogo', name:'양자 보고 정렬', en:'Quantum Bogo Sort (simulation)', category:'패러디', avg:'개념적 농담 · 이 구현 O(n log n)', space:'O(n)', stable:false, fn:quantumBogoDemo, customParody:true },
   { id:'slow', name:'슬로 정렬', en:'Slowsort', category:'패러디', avg:'초다항식', space:'O(n)', stable:false, fn:slowSort, maxSize:12 },
-  { id:'bead', name:'비드 정렬', en:'Bead Sort', category:'특수', avg:'구현 방식에 따라 다름', space:'O(n + k)', stable:false, fn:bead, maxSize:80 }
+  { id:'bead', name:'비드 정렬', en:'Bead Sort', category:'이색·비효율', avg:'구현 방식에 따라 다름', space:'O(n + k)', stable:false, fn:bead, maxSize:80 }
 ];
 
+const quadraticIds = new Set(['bubble','selection','exchange','cocktail','comb','gnome','oddEven','doubleSelection','bingo','insertion','binaryInsertion','cycle','pancake','circle','patience','strand','librarySort','pairInsertion','doubleInsertion','inplaceMerge','grailStyle','wikiStyle','sqrtSort','flashSort']);
+for (const algo of algorithms) if (quadraticIds.has(algo.id)) algo.maxSize = Math.min(algo.maxSize || Infinity, 2000);
 export const algorithmById = Object.fromEntries(algorithms.map(a => [a.id, a]));
 
 export function fitArrayForAlgorithm(input, algo) {

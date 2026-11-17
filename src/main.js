@@ -5,7 +5,7 @@ import { BarView } from './visual.js';
 import { SortAudio } from './audio.js';
 import { icon } from './icons.js';
 import { algorithmDescriptions } from './descriptions.js';
-import { LIBRARY_DEFAULT_SPEED, LIBRARY_SPEEDS, LIBRARY_COMPLETE_HOLD_MS, libraryInputSize, libraryEventsPerSecond, filterLibraryAlgorithms, algorithmsInCollection, isExperimentalSort, advanceLibraryCard } from './library.js';
+import { CATALOG_CATEGORIES, LIBRARY_DEFAULT_SPEED, LIBRARY_SPEEDS, LIBRARY_COMPLETE_HOLD_MS, libraryInputSize, libraryEventsPerSecond, filterLibraryAlgorithms, algorithmsInCollection, isExperimentalSort, advanceLibraryCard } from './library.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const app = $('#app');
@@ -13,20 +13,22 @@ const sidebarMedia = window.matchMedia('(min-width: 621px)');
 const initial = { page: 'home', algo: 'quickHoare', pattern: 'random', count: 100, speed: 82, style: 'bars', soundOn: true, volume: 70, soundStyle: 'retro', sidebar: sidebarMedia.matches };
 let cached = {};
 try { cached = JSON.parse(localStorage.getItem('sortlab:prefs') || '{}') || {}; } catch { /* private browsing */ }
-const state = { ...initial, ...cached, page: 'home', sidebar: sidebarMedia.matches, settings: false, picker: false, pickerCategory: '전체', pickerQuery: '', pickerTarget: 'main', librarySelected: 'quickHoare', libraryQuery: '', experimentQuery: '', libraryCategory: '전체', librarySpeed: LIBRARY_SPEEDS.includes(Number(cached.librarySpeed)) ? Number(cached.librarySpeed) : LIBRARY_DEFAULT_SPEED, libraryPanel: '', compareIds: ['bubble', 'quickHoare', 'merge', 'heap'], compareSoundIndex: 1, playing: false, focus: false };
+const state = { ...initial, ...cached, page: 'home', sidebar: sidebarMedia.matches, settings: false, picker: false, pickerCategory: '전체', pickerQuery: '', pickerTarget: 'main', librarySelected: 'quickHoare', libraryQuery: '', experimentQuery: '', libraryCategory: '전체', librarySpeed: LIBRARY_SPEEDS.includes(Number(cached.librarySpeed)) ? Number(cached.librarySpeed) : LIBRARY_DEFAULT_SPEED, librarySortMode: ['learning','name','complexity'].includes(cached.librarySortMode)?cached.librarySortMode:'learning', libraryPanel: '', compareIds: ['bubble', 'quickHoare', 'merge', 'heap'], compareSoundIndex: 1, playing: false, focus: false };
+state.count = Math.max(5,Math.min(10000,Number.isFinite(Number(state.count))?Math.round(Number(state.count)):100));
 const sound = new SortAudio();
 sound.enabled = state.soundOn;
 sound.volume = state.volume / 100;
 sound.style = state.soundStyle;
 let engine = null, engineView = null, compareEngines = [], compareViews = [], miniEngines = [], libraryCards = [], libraryObserver = null, libraryDetail = null, libraryDetailFocus = null;
 let lastFrame = 0, opAccumulator = 0, toastTimeout = null, focusTimeout = null;
-const categories = ['전체', '기초', '고급', '분포', '하이브리드', '특수'];
+const categories = ['전체', ...CATALOG_CATEGORIES];
+const SIZE_PRESETS = [100,500,1000,2000,5000,10000];
 const standardAlgorithms = algorithmsInCollection(algorithms);
 const experimentAlgorithms = algorithmsInCollection(algorithms,'experiment');
 if (!algorithmById[state.algo] || isExperimentalSort(algorithmById[state.algo])) state.algo = 'quickHoare';
 const sortedDemoIds = ['bubble', 'insertion', 'quickHoare', 'merge', 'heap', 'shell', 'cocktail', 'radixLsd', 'selection', 'timsort', 'pancake', 'comb'];
 
-function persist() { const { algo, pattern, count, speed, style, soundOn, volume, soundStyle, librarySpeed } = state; try { localStorage.setItem('sortlab:prefs', JSON.stringify({ algo, pattern, count, speed, style, soundOn, volume, soundStyle, librarySpeed })); } catch { /* privacy mode */ } }
+function persist() { const { algo, pattern, count, speed, style, soundOn, volume, soundStyle, librarySpeed, librarySortMode } = state; try { localStorage.setItem('sortlab:prefs', JSON.stringify({ algo, pattern, count, speed, style, soundOn, volume, soundStyle, librarySpeed, librarySortMode })); } catch { /* privacy mode */ } }
 function ebutton(action, symbol, label, css = 'icon-btn', extra = '') { return `<button type="button" class="${css}" data-action="${action}" aria-label="${label}" title="${label}" ${extra}>${icon(symbol)}</button>`; }
 function formatCount(n) { return n.toLocaleString('ko-KR'); }
 function shortName(id) { return algorithmById[id]?.en.split(' · ')[0] || id; }
@@ -78,7 +80,7 @@ function renderPage() {
     showCompareLimits(data);
   } else if (state.page === 'library' || state.page === 'experiment') {
     const experimental = state.page === 'experiment';
-    el.innerHTML = `<section class="screen library-screen gallery-screen${experimental?' experiment-screen':''}">${experimental?'<div class="experiment-intro"><strong>패러디·실험</strong><span>일반 정렬과 다릅니다. 값을 삭제·변경하거나 정렬을 완료하지 못할 수 있어요.</span></div>':''}<div class="gallery-toolbar"><label class="gallery-search">${icon('search',16)}<input id="library-query" type="search" placeholder="검색" aria-label="${experimental?'패러디 실험':'정렬 알고리즘'} 검색" autocomplete="off" value="${escapeHtml(experimental?state.experimentQuery:state.libraryQuery)}" /></label><span id="gallery-count" class="gallery-count" aria-live="polite">${experimental?experimentAlgorithms.length:standardAlgorithms.length}</span>${experimental?'':ebutton('library-filter','filter','정렬 종류 필터','icon-btn gallery-tool')}${ebutton('library-settings','settings','미리보기 속도','icon-btn gallery-tool')}</div><div id="gallery-panel" class="gallery-panel" hidden></div><div class="gallery-grid" id="library-items"></div></section>`;
+    el.innerHTML = `<section class="screen library-screen gallery-screen${experimental?' experiment-screen':''}">${experimental?'<div class="experiment-intro"><strong>패러디·실험</strong><span>일반 정렬과 다릅니다. 값을 삭제·변경하거나 정렬을 완료하지 못할 수 있어요.</span></div>':''}<div class="gallery-toolbar"><label class="gallery-search">${icon('search',16)}<input id="library-query" type="search" placeholder="검색" aria-label="${experimental?'패러디 실험':'정렬 알고리즘'} 검색" autocomplete="off" value="${escapeHtml(experimental?state.experimentQuery:state.libraryQuery)}" /></label><span id="gallery-count" class="gallery-count" aria-live="polite">${experimental?experimentAlgorithms.length:standardAlgorithms.length}</span>${experimental?'':ebutton('library-filter','filter','정렬 종류 필터','icon-btn gallery-tool')}${experimental?'':ebutton('library-order','bars','도감 정렬 순서','icon-btn gallery-tool')}${ebutton('library-settings','settings','미리보기 속도','icon-btn gallery-tool')}</div><div id="gallery-panel" class="gallery-panel" hidden></div><div class="gallery-grid" id="library-items"></div></section>`;
     renderLibraryGallery();
   }
   document.querySelectorAll('.rail-btn.nav[data-page]').forEach(btn => { btn.classList.toggle('active',btn.dataset.page===state.page); btn.toggleAttribute('aria-current',btn.dataset.page===state.page); });
@@ -102,7 +104,7 @@ function libraryCardMarkup(a) { return `<button type="button" class="gallery-car
 function renderLibraryGallery() {
   const root = $('#library-items'); if (!root) return;
   if (libraryObserver) libraryObserver.disconnect(); libraryObserver = null;
-  const experimental=state.page==='experiment';const items = filterLibraryAlgorithms(algorithms, experimental?state.experimentQuery:state.libraryQuery, experimental?'전체':state.libraryCategory, experimental?'experiment':'standard');
+  const experimental=state.page==='experiment';const items = filterLibraryAlgorithms(algorithms, experimental?state.experimentQuery:state.libraryQuery, experimental?'전체':state.libraryCategory, experimental?'experiment':'standard',state.librarySortMode);
   const count = $('#gallery-count'); if (count) count.textContent = items.length;
   root.innerHTML = items.length ? items.map(libraryCardMarkup).join('') : `<div class="gallery-empty">검색 결과가 없습니다.</div>`;
   const start = performance.now();
@@ -113,6 +115,7 @@ function renderLibraryGallery() {
 function renderLibraryPanel() {
   const el=$('#gallery-panel'); if(!el)return;
   el.hidden=!state.libraryPanel;
+  if(state.libraryPanel==='order')el.innerHTML=`<div class="gallery-panel-title">순서</div><div class="gallery-options">${[['learning','학습 순서'],['name','이름순'],['complexity','복잡도순']].map(([id,label])=>`<button type="button" class="gallery-option ${state.librarySortMode===id?'active':''}" data-action="library-order-select" data-value="${id}" aria-pressed="${state.librarySortMode===id}">${label}</button>`).join('')}</div>`;
   if(state.libraryPanel==='speed')el.innerHTML=`<div class="gallery-panel-title">속도</div><div class="gallery-options">${LIBRARY_SPEEDS.map(n=>`<button type="button" class="gallery-option ${n===state.librarySpeed?'active':''}" data-action="library-speed-select" data-value="${n}" aria-pressed="${n===state.librarySpeed}">${n}×</button>`).join('')}</div>`;
   if(state.libraryPanel==='filter')el.innerHTML=`<div class="gallery-panel-title">분류</div><div class="gallery-options">${categories.map(c=>`<button type="button" class="gallery-option ${c===state.libraryCategory?'active':''}" data-action="library-category" data-value="${c}" aria-pressed="${c===state.libraryCategory}">${c}</button>`).join('')}</div>`;
 }
@@ -142,7 +145,7 @@ function renderSettings() {
   if (!state.settings) { host.innerHTML = ''; return; }
   const patternButtons = patterns.map(p=>`<button class="choice ${state.pattern===p.id?'active':''}" data-action="pattern" data-value="${p.id}">${p.name}</button>`).join('');
   host.innerHTML = `<div class="settings-panel" role="dialog" aria-label="정렬 설정"><div class="setting-row"><span class="setting-label">설정</span>${ebutton('settings','close','닫기')}</div>
-   <div class="setting-section"><div class="setting-row"><label class="setting-label" for="count-range">배열</label><span class="setting-value" id="count-label">${state.count}</span></div><input class="setting-range" data-setting="count" id="count-range" type="range" min="5" max="1000" step="1" value="${state.count}" aria-label="배열 크기" /></div>
+   <div class="setting-section"><div class="setting-row"><label class="setting-label" for="count-range">배열</label><input class="setting-value size-number" id="count-number" data-setting="count-number" type="number" min="5" max="10000" step="1" value="${state.count}" aria-label="배열 크기 직접 입력" /></div><input class="setting-range" data-setting="count" id="count-range" type="range" min="5" max="10000" step="1" value="${state.count}" aria-label="배열 크기" /><div class="size-presets">${SIZE_PRESETS.map(n=>`<button type="button" class="size-preset ${state.count===n?'active':''}" data-action="count-preset" data-value="${n}">${n.toLocaleString('ko-KR')}</button>`).join('')}</div></div>
    <div class="setting-section"><div class="setting-row"><label class="setting-label" for="speed-range">속도</label><span class="setting-value" id="speed-label">${state.speed}×</span></div><input class="setting-range" data-setting="speed" id="speed-range" type="range" min="1" max="200" step="1" value="${state.speed}" aria-label="정렬 속도" /></div>
    <div class="setting-section"><span class="setting-label">배열 형태</span><div class="button-group">${patternButtons}</div></div>
    ${state.page === 'visual' ? `<div class="setting-section"><span class="setting-label">표현</span><div class="button-group">${[['bars','막대'],['dots','점'],['circle','원형']].map(([id,name])=>`<button class="choice ${state.style===id?'active':''}" data-action="style" data-value="${id}">${name}</button>`).join('')}</div></div>`:''}
@@ -214,6 +217,7 @@ function actionHandler(event) {
   if (action==='shuffle') return resetCurrent(true);
   if (action==='sound') { state.soundOn=!state.soundOn; sound.setEnabled(state.soundOn); persist(); updateSoundIcon(); if (state.settings) renderSettings(); return; }
   if (action==='settings') { state.settings=!state.settings; renderSettings(); updateStats(); revealFocus(); return; }
+  if (action==='count-preset') { state.count=Number(value);persist();renderSettings();resetCurrent(true);return; }
   if (action==='pattern') { state.pattern=value; persist(); renderSettings(); resetCurrent(true); return; }
   if (action==='style') { state.style=value; if(engineView) engineView.style=value; persist(); renderSettings(); return; }
   if (action==='sound-style') { state.soundStyle=value; sound.style=value; persist(); renderSettings(); return; }
@@ -223,7 +227,8 @@ function actionHandler(event) {
   if (action==='library-select') return openLibraryDetail(button.dataset.id);
   if (action==='library-close') { if(button.classList.contains('overlay')&&event.target!==button)return; return closeLibraryDetail(); }
   if (action==='library-open') { if(!algorithmById[state.librarySelected] || isExperimentalSort(algorithmById[state.librarySelected]))return; state.algo=state.librarySelected; persist(); navigation('visual'); return; }
-  if (action==='library-settings' || action==='library-filter') {const panel=action==='library-settings'?'speed':'filter';state.libraryPanel=state.libraryPanel===panel?'':panel;renderLibraryPanel();return;}
+  if (action==='library-settings' || action==='library-filter' || action==='library-order') {const panel=action==='library-settings'?'speed':action==='library-order'?'order':'filter';state.libraryPanel=state.libraryPanel===panel?'':panel;renderLibraryPanel();return;}
+  if (action==='library-order-select') {state.librarySortMode=value;state.libraryPanel='';persist();renderLibraryPanel();renderLibraryGallery();return;}
   if (action==='library-speed-select') { state.librarySpeed=Number(value);state.libraryPanel='';persist();renderLibraryPanel();return;}
   if (action==='library-category') {state.libraryCategory=value;state.libraryPanel='';renderLibraryPanel();renderLibraryGallery();return;}
   if (action==='library-detail-play') {if(!libraryDetail)return;if(libraryDetail.engine.completed)resetLibraryDetail();else libraryDetail.playing=!libraryDetail.playing;updateLibraryDetailPlay();return;}
@@ -239,9 +244,10 @@ document.addEventListener('input', (event)=>{
   if (event.target.id==='library-query') { if(state.page==='experiment')state.experimentQuery=event.target.value;else state.libraryQuery=event.target.value; renderLibraryGallery(); }
   const key=event.target.dataset.setting;
   if (key==='speed') { state.speed=Number(event.target.value); const label=$('#speed-label'); if(label) label.textContent=state.speed+'×'; persist(); }
-  if (key==='count') { state.count=Number(event.target.value); const label=$('#count-label'); if(label) label.textContent=state.count; persist(); resetCurrent(true); }
+  if (key==='count') { state.count=Math.max(5,Math.min(10000,Math.round(Number(event.target.value))));const number=$('#count-number');if(number)number.value=state.count;persist(); }
   if (key==='volume') { state.volume=Number(event.target.value); sound.volume=state.volume/100; const label=$('#volume-label'); if(label) label.textContent=state.volume+'%'; persist(); }
 });
+document.addEventListener('change',(event)=>{const key=event.target?.dataset?.setting;if(key==='count'||key==='count-number'){state.count=Math.max(5,Math.min(10000,Math.round(Number(event.target.value)||100)));const slider=$('#count-range'),number=$('#count-number');if(slider)slider.value=state.count;if(number)number.value=state.count;persist();renderSettings();resetCurrent(true);}});
 document.addEventListener('keydown',(event)=>{
   if (event.key==='Escape') { if (libraryDetail) closeLibraryDetail(); else if(['library','experiment'].includes(state.page)&&state.libraryPanel){state.libraryPanel='';renderLibraryPanel();}else if (state.picker) closePicker(); else if(state.settings){state.settings=false;renderSettings();updateStats();}else if(state.focus){state.focus=false;app.classList.remove('focus','reveal');} else if(state.sidebar){state.sidebar=false;$('#layout').classList.remove('expanded');} return; }
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
@@ -260,7 +266,7 @@ function renderFrame(now) {
   if (!document.hidden) {
     if (state.page==='visual'&&engine) {
       if(state.playing&&!engine.completed) {
-        opAccumulator+=dt*speedToEventsPerSecond(state.speed);
+        opAccumulator+=dt*speedToEventsPerSecond(state.speed)*Math.max(1,Math.min(20,Math.round(engine.values.length/500)));
         const ops=Math.min(10000, Math.floor(opAccumulator));opAccumulator-=ops;
         const wasDone=engine.completed;
         const events=engine.run(ops);
@@ -272,7 +278,7 @@ function renderFrame(now) {
     }
     if(state.page==='compare'&&compareEngines.length) {
       if(state.playing) {
-        opAccumulator+=dt*speedToEventsPerSecond(state.speed);
+        opAccumulator+=dt*speedToEventsPerSecond(state.speed)*Math.max(1,Math.min(20,Math.round((compareEngines[0]?.values.length||100)/500)));
         const ops=Math.min(8000,Math.floor(opAccumulator)); opAccumulator-=ops;
         compareEngines.forEach((e,i)=>{if(!e.completed) {const wasDone=e.completed, events=e.run(ops,3);if(i===state.compareSoundIndex)sound.consume(events,Math.max(1,...e.values));if(!wasDone&&e.completed&&i===state.compareSoundIndex&&!e.failed)sound.complete();}});
         if(compareEngines.every(e=>e.completed)){state.playing=false;setPlayIcon();const failed=compareEngines.filter(e=>e.failed);if(failed.length)toast(`${failed.length}개의 정렬이 중단되었습니다.`);}

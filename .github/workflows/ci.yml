@@ -1,0 +1,17 @@
+name: Check SortLab
+on:
+  push:
+    branches: [main, feat/catalog-65-large-arrays]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check src/main.js && node --check src/visual.js && node --check src/extra-classic.js && node --check src/extra-advanced.js
+      - run: npm test
