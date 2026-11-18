@@ -1,5 +1,10 @@
 import { extraClassic } from './extra-classic.js';
 import { extraAdvanced } from './extra-advanced.js';
+import { extraFrontier } from './extra-frontier.js';
+import { extraModern } from './extra-modern.js';
+import { extraSpecialized } from './extra-specialized.js';
+import { extraExperimental } from './extra-experimental.js';
+import { advancedRefinements } from './refined-core.js';
 /**
  * All algorithms are generators of replayable events. Their own private array is
  * the source of truth; the renderer applies swap/write events to its own copy.
@@ -112,8 +117,11 @@ export const algorithms = [
   { id:'threeWayQuick', name:'3방향 퀵 정렬', en:'Three-Way Quick Sort', category:'퀵·분할', avg:'O(n log n)', space:'O(log n)', stable:false, fn:threeWayQuick },
   { id:'binaryQuick', name:'이진 퀵 정렬', en:'Binary Quick Sort', category:'분포·기수', avg:'O(bn)', space:'O(b)', stable:false, fn:binaryQuick },
   { id:'blockInsertion', name:'블록 삽입 병합 정렬', en:'Block Insertion Merge Sort', category:'하이브리드', avg:'O(n log n)', space:'O(n)', stable:true, fn:blockInsertionSort },
-  ...extraClassic,
-  ...extraAdvanced,
+  ...extraClassic.map(a=>advancedRefinements[a.id]?{...a,...advancedRefinements[a.id]}:a),
+  ...extraAdvanced.map(a=>advancedRefinements[a.id]?{...a,...advancedRefinements[a.id]}:a),
+  ...extraFrontier,
+  ...extraModern,
+  ...extraSpecialized,
   { id:'stalin', name:'스탈린 정렬', en:'Stalin Sort', category:'패러디', avg:'O(n)', space:'O(1)', stable:true, fn:stalinSort, altersInput:true, maxSize:100 },
   { id:'thanos', name:'타노스 정렬', en:'Thanos Sort', category:'패러디', avg:'비교 횟수는 입력에 따라 변동', space:'O(n)', stable:false, fn:thanosSort, altersInput:true, maxSize:100 },
   { id:'socialism', name:'사회주의 정렬', en:'Socialism Sort (SortLab parody)', category:'패러디', avg:'O(n)', space:'O(1)', stable:false, fn:socialismSort, altersInput:true, customParody:true },
@@ -123,7 +131,8 @@ export const algorithms = [
   { id:'miracle', name:'기적 정렬', en:'Miracle Sort', category:'패러디', avg:'실행 종료 보장 없음', space:'O(1)', stable:false, fn:miracleSort, mayNotFinish:true, maxSize:48 },
   { id:'quantumBogo', name:'양자 보고 정렬', en:'Quantum Bogo Sort (simulation)', category:'패러디', avg:'개념적 농담 · 이 구현 O(n log n)', space:'O(n)', stable:false, fn:quantumBogoDemo, customParody:true },
   { id:'slow', name:'슬로 정렬', en:'Slowsort', category:'패러디', avg:'초다항식', space:'O(n)', stable:false, fn:slowSort, maxSize:12 },
-  { id:'bead', name:'비드 정렬', en:'Bead Sort', category:'이색·비효율', avg:'구현 방식에 따라 다름', space:'O(n + k)', stable:false, fn:bead, maxSize:80 }
+  { id:'bead', name:'비드 정렬', en:'Bead Sort', category:'이색·비효율', avg:'구현 방식에 따라 다름', space:'O(n + k)', stable:false, fn:bead, maxSize:80 },
+  ...extraExperimental
 ];
 
 const quadraticIds = new Set(['bubble','selection','exchange','cocktail','comb','gnome','oddEven','doubleSelection','bingo','insertion','binaryInsertion','cycle','pancake','circle','patience','strand','librarySort','pairInsertion','doubleInsertion','inplaceMerge','grailStyle','wikiStyle','sqrtSort','flashSort']);
