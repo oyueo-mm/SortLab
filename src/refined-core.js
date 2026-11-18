@@ -11,6 +11,6 @@ function* inPlaceRotationMerge(a){const n=a.length;function* reverse(lo,hi){for(
 export const advancedRefinements={
 pdqSort:{name:'PDQ 정렬 · 개선형',en:'Pattern-Defeating Quick Sort (enhanced educational)',avg:'O(n log n) 최악 보장',space:'O(log n)',fn:improvedPDQ},
 smoothStyle:{name:'스무스 정렬',en:'Smoothsort (Leonardo heaps)',avg:'O(n log n), 정렬 입력 O(n)',space:'O(1)',fn:actualSmoothsort,maxSize:3000},
-grailStyle:{name:'그레일 스타일 버퍼 병합 · 개선형',en:'Grail-Inspired √n-Buffered Block Merge (educational)',avg:'보수적 상한 O(n²)',space:'O(√n)',fn:bufferedBlockMerge,maxSize:2000},
-wikiStyle:{name:'위키 스타일 제자리 병합 · 개선형',en:'Wiki-Inspired Constant-Space Rotation Merge (educational)',avg:'보수적 상한 O(n²)',space:'O(1)',fn:inPlaceRotationMerge,maxSize:2000}
+grailStyle:{name:'그레일 버퍼 정렬 · 개선형',en:'Grail-Inspired √n-Buffered Block Merge (educational)',avg:'보수적 상한 O(n²)',space:'O(√n)',fn:bufferedBlockMerge,maxSize:2000},
+wikiStyle:{name:'위키 제자리 병합 정렬 · 개선형',en:'Wiki-Inspired Constant-Space Rotation Merge (educational)',avg:'보수적 상한 O(n²)',space:'O(1)',fn:inPlaceRotationMerge,maxSize:2000}
 };
