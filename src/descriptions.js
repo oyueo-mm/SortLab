@@ -1,3 +1,4 @@
+import { additionalDescriptions } from './extended-metadata.js';
 // Concise Korean explanations are intentionally shown only when a card is opened.
 export const algorithmDescriptions = {
   librarySort:{summary:'삽입을 위한 빈 칸을 남겨 값을 배치한다.',detail:'중간 공간을 사용하는 Library Sort 교육용 시뮬레이션으로, 재배치되는 정렬 구간을 보여준다.'},
@@ -75,3 +76,5 @@ export const algorithmDescriptions = {
   quantumBogo:{summary:'정렬된 우주만 관측한다고 가정한다.',detail:'진짜 양자 컴퓨터가 아니다. 정렬된 결과를 미리 계산해 보여주는 연출이다.'},
   slow:{summary:'일부러 비효율적인 재귀 과정을 반복한다.',detail:'Slowsort는 실제로 값을 보존해 정렬하지만 매우 느리므로 작은 입력만 사용한다.'}
 };
+
+Object.assign(algorithmDescriptions,additionalDescriptions);

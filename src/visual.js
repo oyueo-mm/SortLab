@@ -24,19 +24,19 @@ export class BarView {
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.width = width; this.height = height;
   }
-  draw(values, { highlight = null, completed = false, finishedAt = 0, now = performance.now(), altered = false } = {}) {
+  draw(values, { highlight = null, completed = false, finishedAt = 0, now = performance.now(), altered = false, signed = false } = {}) {
     if (!this.ctx) return;
     this.resize();
     const ctx = this.ctx, w = this.width, h = this.height;
     ctx.fillStyle = this.compact ? '#f5f7fb' : '#ffffff'; ctx.fillRect(0, 0, w, h);
     if (!values.length) return;
     this.lastValues = values;
-    const max = Math.max(1, ...values), min = Math.min(...values), total = values.length;
+    const max = Math.max(1, ...(signed?values.map(Math.abs):values)), min = Math.min(...(signed?values.map(Math.abs):values)), total = values.length;
     const padX = this.compact ? 7 : Math.min(20, w * 0.025);
     const maxColumns = Math.max(24, Math.floor((w - padX * 2) * 1.5));
     const n = Math.min(total, maxColumns);
     let shown = values;
-    if (total > n) { const bins = new Float64Array(n); for (let i = 0; i < total; i++) { const bin = Math.min(n - 1, Math.floor(i * n / total)); if (values[i] > bins[bin]) bins[bin] = values[i]; } shown = bins; }
+    if (total > n) { const bins = new Float64Array(n); for (let i = 0; i < total; i++) { const bin = Math.min(n - 1, Math.floor(i * n / total)); if ((signed?Math.abs(values[i]):values[i]) > bins[bin]) bins[bin] = signed?Math.abs(values[i]):values[i]; } shown = bins; }
     const padB = this.compact ? 8 : 16, top = this.compact ? 9 : 16;
     const bw = (w - padX * 2) / n;
     const scaleHeight = h - top - padB;
@@ -44,8 +44,8 @@ export class BarView {
     const visualIndex = i => i < 0 ? -1 : Math.min(n - 1, Math.floor(i * n / total));
     const activeA = visualIndex(highlight?.i ?? -1), activeB = visualIndex(highlight?.j ?? -1);
     for (let i = 0; i < n; i++) {
-      const x = padX + i * bw, val = shown[i], barH = Math.max(2, (val / max) * scaleHeight);
-      const color = colorForValue(val,min,max,this.palette);
+      const x = padX + i * bw, val = signed?Math.abs(shown[i]):shown[i], barH = Math.max(2, (val / max) * scaleHeight);
+      const color = signed&&shown[i]<0?'#c16a57':colorForValue(val,min,max,this.palette);
       ctx.fillStyle = color;
       const gap = bw > 8 ? Math.max(1.5, bw * .16) : bw > 3 ? 1 : 0;
       if (this.style === 'dots' && !this.compact) { ctx.beginPath(); ctx.arc(x + bw / 2, h - padB - barH, Math.max(1.1, Math.min(4, (bw - gap) / 2)), 0, Math.PI * 2); ctx.fill(); }
