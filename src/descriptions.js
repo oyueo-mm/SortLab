@@ -1,3 +1,4 @@
+import { geometryDescriptions } from './geometry-metadata.js';
 import { additionalDescriptions } from './extended-metadata.js';
 // Concise Korean explanations are intentionally shown only when a card is opened.
 export const algorithmDescriptions = {
@@ -78,3 +79,5 @@ export const algorithmDescriptions = {
 };
 
 Object.assign(algorithmDescriptions,additionalDescriptions);
+
+Object.assign(algorithmDescriptions,geometryDescriptions);
