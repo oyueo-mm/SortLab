@@ -5,7 +5,7 @@ import { BarView } from './visual.js';
 import { GridSortView } from './grid-view.js';
 import { ART_BY_ID,DEFAULT_ART_BY_MODE } from './art-presets.js';
 import { PALETTE_LABELS } from './palette.js';
-import { SortImageAsset, ImageSortView, IMAGE_MODES, IMAGE_PIECES, IMAGE_THEMES, PIXEL_METRICS, imageCountFor, imageInputFor } from './image-sort.js';
+import { SortImageAsset, ImageSortView, IMAGE_MODES, IMAGE_PIECES, IMAGE_THEMES, imageCountFor, imageInputFor } from './image-sort.js';
 import { settingsMarkup } from './settings-ui.js';
 import { SortAudio } from './audio.js';
 import { icon } from './icons.js';
@@ -17,15 +17,15 @@ import { CATALOG_CATEGORIES, LIBRARY_DEFAULT_SPEED, LIBRARY_SPEEDS, LIBRARY_COMP
 const $ = (selector, root = document) => root.querySelector(selector);
 const app = $('#app');
 const sidebarMedia = window.matchMedia('(min-width: 621px)');
-const initial = { page: 'home', algo: 'quickHoare', pattern: 'random', count: 100, speed: 82, style: 'bars', palette: 'rainbow', imageMode: 'strips', imageCount: 512, imageTheme: 'greatwave', imageMetric: 'brightness', soundOn: true, volume: 70, soundStyle: 'retro', sidebar: sidebarMedia.matches };
+const initial = { page: 'home', algo: 'quickHoare', pattern: 'random', count: 100, speed: 82, style: 'bars', palette: 'rainbow', imageMode: 'strips', imageCount: 512, imageTheme: 'greatwave', soundOn: true, volume: 70, soundStyle: 'retro', sidebar: sidebarMedia.matches };
 let cached = {};
 try { cached = JSON.parse(localStorage.getItem('sortlab:prefs') || '{}') || {}; } catch { /* private browsing */ }
 const state = { ...initial, ...cached, page: 'home', sidebar: sidebarMedia.matches, settings: false, picker: false, pickerCategory: '전체', pickerQuery: '', pickerTarget: 'main', librarySelected: 'quickHoare', libraryQuery: '', experimentQuery: '', libraryCategory: '전체', librarySpeed: LIBRARY_SPEEDS.includes(Number(cached.librarySpeed)) ? Number(cached.librarySpeed) : LIBRARY_DEFAULT_SPEED, librarySortMode: ['learning','name','complexity'].includes(cached.librarySortMode)?cached.librarySortMode:'learning', libraryPanel: '', guideSelected: 'bubble', guideQuery: '', compareIds: ['bubble', 'quickHoare', 'merge', 'heap'], compareSoundIndex: 1, playing: false, focus: false };
 state.count = Math.max(5,Math.min(10000,Number.isFinite(Number(state.count))?Math.round(Number(state.count)):100));
 if(!['bars','dots','circle','image'].includes(state.style))state.style='bars';
 if(!PALETTE_LABELS[state.palette])state.palette='rainbow';
+if(state.imageMode==='pixels')state.imageMode='tiles'; // Upgrade saved pixel preferences to real tile restoration.
 if(!IMAGE_MODES[state.imageMode])state.imageMode='strips';
-if(!PIXEL_METRICS[state.imageMetric])state.imageMetric='brightness';
 if(!IMAGE_THEMES[state.imageTheme])state.imageTheme='greatwave';
 state.imageCount=imageCountFor(state.imageMode,state.imageCount||128);
 let imageAsset=SortImageAsset.sample(ART_BY_ID[state.imageTheme]?'lake':state.imageTheme),imageLoadToken=0;
@@ -43,13 +43,13 @@ const experimentAlgorithms = algorithmsInCollection(algorithms,'experiment');
 if (!algorithmById[state.algo] || isExperimentalSort(algorithmById[state.algo])) state.algo = 'quickHoare';
 const sortedDemoIds = ['bubble', 'insertion', 'quickHoare', 'merge', 'heap', 'shell', 'cocktail', 'radixLsd', 'selection', 'timsort', 'pancake', 'comb'];
 
-function persist() { const { algo, pattern, count, speed, style, palette, imageMode, imageCount, imageTheme, imageMetric, soundOn, volume, soundStyle, librarySpeed, librarySortMode } = state; try { localStorage.setItem('sortlab:prefs', JSON.stringify({ algo, pattern, count, speed, style, palette, imageMode, imageCount, imageTheme, imageMetric, soundOn, volume, soundStyle, librarySpeed, librarySortMode })); } catch { /* privacy mode */ } }
+function persist() { const { algo, pattern, count, speed, style, palette, imageMode, imageCount, imageTheme, soundOn, volume, soundStyle, librarySpeed, librarySortMode } = state; try { localStorage.setItem('sortlab:prefs', JSON.stringify({ algo, pattern, count, speed, style, palette, imageMode, imageCount, imageTheme, soundOn, volume, soundStyle, librarySpeed, librarySortMode })); } catch { /* privacy mode */ } }
 function ebutton(action, symbol, label, css = 'icon-btn', extra = '') { return `<button type="button" class="${css}" data-action="${action}" aria-label="${label}" title="${label}" ${extra}>${icon(symbol)}</button>`; }
 function formatCount(n) { return n.toLocaleString('ko-KR'); }
 function shortName(id) { return algorithmById[id]?.name || id; }
 function algoTitle(id) { const a=algorithmById[id];return a?`<span class="algo-title-stack"><span class="algo-ko">${escapeHtml(a.name)}</span><span class="algo-en">${escapeHtml(a.en)}</span></span>`:escapeHtml(id); }
 function effectiveImageCount() { const chosen=state.page==='compare'?state.compareIds:[state.algo];const limit=Math.min(...chosen.map(id=>algorithmById[id]?.maxSize||Infinity));return imageCountFor(state.imageMode,state.imageCount,limit); }
-function makeView(canvas,compact=false,id=state.algo) { return state.style==='image'?new ImageSortView(canvas,{asset:imageAsset,mode:state.imageMode,metric:state.imageMetric,compact}):state.style==='bars'&&algorithmById[id]?.grid?new GridSortView(canvas,{compact,palette:state.palette}):new BarView(canvas,{compact,style:state.style,palette:state.palette}); }
+function makeView(canvas,compact=false,id=state.algo) { return state.style==='image'?new ImageSortView(canvas,{asset:imageAsset,mode:state.imageMode,compact}):state.style==='bars'&&algorithmById[id]?.grid?new GridSortView(canvas,{compact,palette:state.palette}):new BarView(canvas,{compact,style:state.style,palette:state.palette}); }
 function refreshVisualViews(){$('#hover-readout')?.classList.remove('visible');if(state.page==='visual'&&$('#main-canvas'))engineView=makeView($('#main-canvas'));if(state.page==='compare'&&compareViews.length)compareViews=compareViews.map((_,i)=>makeView($('#compare-'+i),true,state.compareIds[i]));const cv=$('#main-canvas');if(cv)cv.setAttribute('aria-label',state.style==='image'?'이미지 정렬 시각화':'정렬 과정 시각화');}
 function applyImageTheme(id,{quiet=false}={}){if(!IMAGE_THEMES[id])return;const token=++imageLoadToken;state.imageTheme=id;persist();if(ART_BY_ID[id]){imageAsset=SortImageAsset.sample('lake');imageAsset.name=ART_BY_ID[id].name+' · 불러오는 중';refreshVisualViews();resetCurrent(true);renderSettings();SortImageAsset.preset(id).then(asset=>{if(token!==imageLoadToken)return;imageAsset=asset;refreshVisualViews();resetCurrent(true);renderSettings();}).catch(error=>{if(token!==imageLoadToken)return;imageAsset=SortImageAsset.sample('lake');imageAsset.name=ART_BY_ID[id].name+' · 불러오기 실패';refreshVisualViews();resetCurrent(true);renderSettings();if(!quiet)toast('명화 이미지가 없거나 손상되었습니다. 나중에 다시 선택해주세요.');});return;}imageAsset=SortImageAsset.sample(id);refreshVisualViews();resetCurrent(true);renderSettings();}
 function toast(message) { const t = $('#toast'); if (!t) return; t.textContent = message; t.classList.add('show'); clearTimeout(toastTimeout); toastTimeout = setTimeout(() => t.classList.remove('show'), 3400); }
@@ -65,7 +65,7 @@ function renderShell() {
   renderPage();
 }
 
-function newSource(shufflePixels=false) { if(state.style==='image'&&['visual','compare'].includes(state.page))return imageInputFor(imageAsset,state.imageMode,effectiveImageCount(),state.pattern,state.imageMetric,shufflePixels);return generateData(state.count,state.pattern); }
+function newSource() { if(state.style==='image'&&['visual','compare'].includes(state.page))return imageInputFor(imageAsset,state.imageMode,effectiveImageCount(),state.pattern);return generateData(state.count,state.pattern); }
 function commonCompareData(input) { let n = input.length; for (const id of state.compareIds) { const algo = algorithmById[id]; if (algo.maxSize) n = Math.min(n, algo.maxSize); } if (state.compareIds.some(id => algorithmById[id].powerOfTwo)) n = 2 ** Math.floor(Math.log2(n)); return input.slice(0, Math.max(2,n)); }
 function meter() { return '<div class="meter" id="meter" role="progressbar" aria-label="정렬 진행 상태"></div>'; }
 function controls(compact = false) { return `<div class="controlbar" aria-label="재생 제어">${ebutton('shuffle','shuffle','새 배열')}${ebutton('step-back','step-back','한 단계 이전')}${ebutton('play','play','재생 또는 일시정지','play-button','id="play-button"')}${ebutton('step-forward','step-forward','한 단계 다음')}${ebutton('reset','reset','처음부터 다시 정렬')}</div>`; }
@@ -119,7 +119,7 @@ function handleCanvasHover(evt) {
   engineView.hover = index;
   const readout = $('#hover-readout'); if (!readout) return;
   if(index<0||index>=engine.values.length){readout.classList.remove('visible');return;}
-  readout.textContent = state.style==='image'?(state.imageMode==='pixels'?`픽셀 ${index+1} · 정렬 키 ${engine.values[index]}`:`조각 ${index+1} · 원래 위치 ${engine.values[index]}`):`${index}  ·  ${engine.values[index]}`;
+  readout.textContent = state.style==='image'?`조각 ${index+1} · 원래 위치 ${engine.values[index]}`:`${index}  ·  ${engine.values[index]}`;
   readout.style.left = `${evt.clientX - rect.left}px`;
   readout.style.top = `${evt.clientY - rect.top}px`;
   readout.classList.add('visible');
@@ -184,10 +184,10 @@ function renderPickerItems() {
   items.innerHTML = filtered.length ? filtered.map(a=>`<button class="picker-item" data-action="picker-select" data-id="${a.id}"><span class="picker-item-name"><strong>${escapeHtml(a.name)}</strong><span>${escapeHtml(a.en)}</span></span><small>${escapeHtml(a.avg)}</small></button>`).join('') : '<div class="empty-text">결과가 없습니다.</div>';
 }
 function navigation(page) { if (!['home','visual','compare','library','guide','experiment'].includes(page)) return; state.page = page; if (!sidebarMedia.matches) { state.sidebar = false; $('#layout').classList.remove('expanded'); } renderPage(); }
-function resetCurrent(changeArray = false,shufflePixels=false) {
+function resetCurrent(changeArray = false) {
   state.playing = false;
   opAccumulator = 0;
-  const source = changeArray ? newSource(shufflePixels) : state.page === 'visual' ? engine?.initial || newSource() : compareEngines[0]?.initial || newSource();
+  const source = changeArray ? newSource() : state.page === 'visual' ? engine?.initial || newSource() : compareEngines[0]?.initial || newSource();
   if (state.page === 'visual') { engine = new SortEngine(state.algo, source); showAlgoLimit(engine); }
   if (state.page === 'compare') { const sharedData = commonCompareData(source); compareEngines = state.compareIds.map(id => new SortEngine(id,sharedData)); compareEngines.forEach((e,i)=>{const cv=$('#compare-'+i);if(cv)cv.dataset.initialKeyHash=e.initial.reduce((h,v)=>(Math.imul(h^v,16777619)>>>0),2166136261).toString(16);});showCompareLimits(source); }
   if(state.style==='image')refreshVisualViews();
@@ -232,17 +232,16 @@ function actionHandler(event) {
     setPlayIcon(); setMeters(); updateStats(); return;
   }
   if (action==='reset') return resetCurrent(false);
-  if (action==='shuffle') return resetCurrent(true,state.style==='image'&&state.imageMode==='pixels');
+  if (action==='shuffle') return resetCurrent(true);
   if (action==='sound') { state.soundOn=!state.soundOn; sound.setEnabled(state.soundOn); persist(); updateSoundIcon(); if (state.settings) renderSettings(); return; }
   if (action==='settings') { state.settings=!state.settings; renderSettings(); updateStats(); revealFocus(); return; }
   if (action==='count-preset') { state.count=Number(value);persist();renderSettings();resetCurrent(true);return; }
   if (action==='pattern') { state.pattern=value; persist(); renderSettings(); resetCurrent(true); return; }
   if (action==='style') {if(!['bars','dots','circle','image'].includes(value))return;const switchedImage=(state.style==='image')!==(value==='image');state.style=value;if(value==='image'&&!['random','ascending','descending','nearly'].includes(state.pattern))state.pattern='random';persist();refreshVisualViews();if(switchedImage)resetCurrent(true);renderSettings();return;}
   if (action==='palette') {if(!PALETTE_LABELS[value])return;state.palette=value;persist();refreshVisualViews();renderSettings();return;}
-  if (action==='image-mode') {if(!IMAGE_MODES[value])return;state.imageMode=value;state.imageCount=imageCountFor(value,value==='strips'?512:value==='tiles'?256:1024);if(state.imageTheme!=='upload'&&ART_BY_ID[state.imageTheme]){applyImageTheme(DEFAULT_ART_BY_MODE[value]);return;}persist();refreshVisualViews();resetCurrent(true);renderSettings();return;}
+  if (action==='image-mode') {if(!IMAGE_MODES[value])return;state.imageMode=value;state.imageCount=imageCountFor(value,value==='strips'?512:1024);if(state.imageTheme!=='upload'&&ART_BY_ID[state.imageTheme]){applyImageTheme(DEFAULT_ART_BY_MODE[value]);return;}persist();refreshVisualViews();resetCurrent(true);renderSettings();return;}
   if (action==='image-count') {const allowed=IMAGE_PIECES[state.imageMode];const size=Number(value);if(!allowed.includes(size))return;state.imageCount=size;persist();resetCurrent(true);renderSettings();return;}
   if (action==='image-theme') {if(!IMAGE_THEMES[value])return;applyImageTheme(value);return;}
-  if (action==='image-metric') {if(!PIXEL_METRICS[value])return;state.imageMetric=value;persist();refreshVisualViews();resetCurrent(true);renderSettings();return;}
   if (action==='sound-style') { state.soundStyle=value; sound.style=value; persist(); renderSettings(); return; }
   if (action==='focus') { if (state.page!=='visual') return; state.focus=!state.focus; app.classList.toggle('focus',state.focus); app.classList.toggle('reveal',state.focus); if (state.focus) revealFocus(); else app.classList.remove('reveal'); return; }
   if (action==='details') {state.guideSelected=state.algo;navigation('guide');return;}
